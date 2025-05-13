@@ -141,3 +141,7 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+mobile/build/
+viewer/build/
+build/
