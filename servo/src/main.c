@@ -11,8 +11,8 @@
 #define PAN_RIGHT_USEC  700
 #define PAN_CENTER_USEC 1700
 
-#define TILT_DOWN_USEC  2000
-#define TILT_UP_USEC    500
+#define TILT_DOWN_USEC  500
+#define TILT_UP_USEC    2000
 #define TILT_CENTER_USEC 1000
 
 static const struct pwm_dt_spec pan = PWM_DT_SPEC_GET(DT_ALIAS(servo_pan));
@@ -21,7 +21,7 @@ static const struct pwm_dt_spec tilt = PWM_DT_SPEC_GET(DT_ALIAS(servo_tilt));
 static int cmd_left(const struct shell *sh, size_t argc, char **argv)
 {
   pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_LEFT_USEC), 0);
-  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
+  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
   shell_print(sh, "Pan left");
   return 0;
 }
@@ -29,14 +29,14 @@ static int cmd_left(const struct shell *sh, size_t argc, char **argv)
 static int cmd_right(const struct shell *sh, size_t argc, char **argv)
 {
   pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_RIGHT_USEC), 0);
-  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
+  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
   shell_print(sh, "Pan right");
   return 0;
 }
 
 static int cmd_stop(const struct shell *sh, size_t argc, char **argv)
 {
-  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
+  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
   pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
   shell_print(sh, "Tilt up");
   return 0;
@@ -44,7 +44,7 @@ static int cmd_stop(const struct shell *sh, size_t argc, char **argv)
 
 static int cmd_go(const struct shell *sh, size_t argc, char **argv)
 {
-  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
+  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
   pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
   shell_print(sh, "Tilt down");
   return 0;
