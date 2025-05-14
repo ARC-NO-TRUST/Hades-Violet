@@ -70,4 +70,4 @@ setInterval(async () => {
     } catch (err) {
         console.error('Failed to send dummy data:', err.message);
     }
-}, 2000);
+}, 5000);

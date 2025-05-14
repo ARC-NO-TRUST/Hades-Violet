@@ -1,0 +1,32 @@
+/ {
+    aliases {
+        servo-pan = &servo_pan;
+        servo-tilt = &servo_tilt;
+    };
+
+    pwmleds {
+        compatible = "pwm-leds";
+        status = "okay";
+
+        servo_tilt: tilt_led {
+            pwms = <&pwm2 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA15 → D9
+            label = "Pan Servo";
+        };
+
+        servo_pan: pan_led {
+            pwms = <&pwm2 3 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA2 → D10
+            label = "Tilt Servo";
+        };
+    };
+};
+
+&timers2 {
+    st,prescaler = <10000>;
+    status = "okay";
+
+    pwm2: pwm {
+        status = "okay";
+        pinctrl-0 = <&tim2_ch1_pa15 &tim2_ch3_pa2>;  // CH1 = D9, CH3 = D10
+        pinctrl-names = "default";
+    };
+};
