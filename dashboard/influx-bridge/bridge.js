@@ -1,9 +1,3 @@
-/**
- * bridge.js - Node.js script to act as a data bridge between your AI system and InfluxDB.
- * It listens for incoming JSON sensor data and writes it to InfluxDB in line protocol format.
- * It also simulates data every 5 seconds for testing.
- */
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
