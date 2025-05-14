@@ -9,7 +9,8 @@ FILE(GLOB app_sources src/*.c)
 # the path given needs to be relative to the
 # CMakeLists root, which is app/prac3 here,
 # hence the ../../lib.c.
-FILE(GLOB lib_sources ../lib/accelerometer.c)
+FILE(GLOB lib_sources ../lib/accelerometer.c 
+                      ../lib/bt_mobile.c)
 
 # Tell CMake to build with the app and lib sources
 target_sources(app PRIVATE ${app_sources} ${lib_sources})
