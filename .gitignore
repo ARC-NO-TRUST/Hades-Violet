@@ -145,4 +145,4 @@ Temporary Items
 mobile/build/
 viewer/build/
 build/
-servo/build/
+servo/build/!/gesture_ai/.venv/
