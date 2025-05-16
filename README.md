@@ -11,7 +11,7 @@
 
 ## Overview
 
-**Hades - Violet** is a smart traffic gesture recognition system designed to enhance autonomous vehicle operations in non-standard traffic scenarios. The system interprets hand gestures from traffic officers using a combination of sensor data and computer vision, facilitating real-time vehicle responses in environments lacking conventional traffic signals.
+**Hades - Violet** is a smart traffic officer gesture recognition system designed to enhance autonomous vehicle operations in non-standard traffic scenarios. The system interprets hand gestures from traffic officers using a combination of sensor data and machine learning, facilitating real-time vehicle responses in environments lacking conventional traffic signals.
 
 ---
 
@@ -20,21 +20,21 @@
 The system comprises the following components:
 
 - **Wearable Sensor Node (Nordic Thingy:52):** Captures accelerometer data from traffic officer gestures.
-- **Processing Unit (Raspberry Pi 4B):** Fuses accelerometer data with camera input to classify gestures using MediaPipe and OpenCV.
-- **Display Unit (M5Core2):** Presents recognized gestures and proximity alerts to the vehicle operator.
-- **Actuation Mechanism:** Controls vehicle movements via a pan-tilt servo system based on recognized gestures.
+- **Processing Unit (Raspberry Pi 4B):** Fuses accelerometer data, mmWave radar with camera input to classify gestures using MediaPipe and OpenCV.
+- **Display Unit (M5Core2):** Presents recognised gestures and proximity alerts to the vehicle operator.
+- **Actuation Mechanism:** Controls vehicle movements via a pan-tilt servo system based on recognised gestures.
 - **Audio Feedback:** Provides proximity indications through a speaker system.
-- **Monitoring Dashboard (Grafana):** Visualizes system outputs for real-time monitoring and analysis.
+- **Monitoring Dashboard (Grafana):** Visualises system outputs for real-time monitoring and analysis.
 
 ---
 
 ## Features
 
-- **Real-Time Gesture Recognition:** Utilizes MediaPipe and OpenCV for efficient and accurate gesture classification.
-- **Sensor Fusion:** Combines data from accelerometers and cameras to improve recognition reliability.
+- **Real-Time Gesture Recognition:** Utilises MediaPipe and OpenCV for efficient and accurate gesture classification.
+- **Sensor Fusion:** Combines data from the accelerometer, mmWave radar and camera to improve recognition reliability.
 - **BLE Communication:** Employs Bluetooth Low Energy for seamless data transmission between system components.
 - **User Interface:** Offers intuitive visual and auditory feedback to vehicle operators.
-- **Data Visualization:** Integrates with Grafana to provide comprehensive system monitoring.
+- **Data Visualisation:** Integrates with Grafana to provide comprehensive system monitoring.
 
 ---
 
@@ -48,7 +48,7 @@ csse4011Project/
 ├── include/          # Shared header files and definitions
 ├── lib/              # External libraries and dependencies
 ├── mobile/           # Mobile node code for BLE advertising
-├── servo/            # Servo motor control scripts
+├── actuator/         # Actuator node - servo motor and speaker control scripts
 ├── viewer/           # M5Core2 UI and BLE listener code
 ├── .gitignore        # Git ignore file
 ├── LICENSE           # Project license (MIT)
@@ -68,6 +68,7 @@ csse4011Project/
   - USB Camera
   - Pan-Tilt Servo Mechanism
   - Speaker System
+  - mmWave Radar
 
 - **Software:**
   - Python 3.x
@@ -103,7 +104,7 @@ csse4011Project/
 
 5. **Launch the System:**
    - Start the gesture recognition script on the Raspberry Pi.
-   - Initialize the Grafana dashboard for monitoring.
+   - Initialise the Grafana dashboard for monitoring.
    - Activate the M5Core2 display unit.
 
 ---
@@ -114,17 +115,17 @@ csse4011Project/
    - The traffic officer wears the Nordic Thingy:52, which captures accelerometer data corresponding to hand gestures.
 
 2. **Gesture Recognition:**
-   - The Raspberry Pi processes accelerometer and camera data to classify gestures in real-time.
+   - The Raspberry Pi processes accelerometer, mmWave radar and camera data to classify gestures in real-time.
 
 3. **Vehicle Response:**
-   - Recognized gestures are transmitted to the vehicle's control system, prompting appropriate movements via the servo mechanism.
+   - Recognised gestures are transmitted to the vehicle's control system, prompting appropriate movements via the servo mechanism.
 
 4. **Feedback Mechanisms:**
-   - The M5Core2 displays the recognized gesture and proximity alerts.
+   - The M5Core2 displays the recognised gesture and proximity alerts.
    - The speaker system provides auditory cues for proximity warnings.
 
 5. **Monitoring:**
-   - The Grafana dashboard visualizes system performance and logs for analysis.
+   - The Grafana dashboard visualises system performance and logs for analysis.
 
 ---
 
