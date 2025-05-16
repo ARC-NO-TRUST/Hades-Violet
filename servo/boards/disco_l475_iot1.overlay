@@ -2,6 +2,7 @@
     aliases {
         servo-pan = &servo_pan;
         servo-tilt = &servo_tilt;
+        speaker-out = &speaker_pwm;
     };
 
     pwmleds {
@@ -9,13 +10,18 @@
         status = "okay";
 
         servo_tilt: tilt_led {
-            pwms = <&pwm2 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA15 → D9
+            pwms = <&pwm2 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA15 = D9
             label = "Pan Servo";
         };
 
         servo_pan: pan_led {
-            pwms = <&pwm2 3 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA2 → D10
+            pwms = <&pwm2 3 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // PA2 = D10
             label = "Tilt Servo";
+        };
+
+        speaker_pwm: speaker_out {
+            pwms = <&pwm2 2 PWM_USEC(1000) PWM_POLARITY_NORMAL>; // PA1 = D6
+            label = "Speaker PWM";
         };
     };
 };
@@ -26,7 +32,7 @@
 
     pwm2: pwm {
         status = "okay";
-        pinctrl-0 = <&tim2_ch1_pa15 &tim2_ch3_pa2>;  // CH1 = D9, CH3 = D10
+        pinctrl-0 = <&tim2_ch1_pa15 &tim2_ch2_pa1 &tim2_ch3_pa2>;
         pinctrl-names = "default";
     };
 };
