@@ -82,7 +82,7 @@ csse4011Project/
 
 1. **Clone the Repository:**
    ```bash
-   git clone https://github.com/ARC-NO-TRUST/csse4011Project.git
+   git clone https://github.com/ARC-NO-TRUST/Hades-Violet.git
    cd csse4011Project
    ```
 
