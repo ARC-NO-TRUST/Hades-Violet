@@ -146,3 +146,4 @@ mobile/build/
 viewer/build/
 build/
 servo/build/!/gesture_ai/.venv/
+/gesture_ai/venv/
