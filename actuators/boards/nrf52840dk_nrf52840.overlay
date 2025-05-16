@@ -19,9 +19,9 @@
             label = "Tilt Servo";
         };
 
-        speaker_pwm: speaker_out {
-            pwms = <&pwm0 2 PWM_USEC(1000) PWM_POLARITY_NORMAL>; // P0.15
-            label = "Speaker PWM";
+        speaker_pwm: speaker_led {
+            pwms = <&pwm1 0 PWM_USEC(1000) PWM_POLARITY_NORMAL>; // P0.16
+            label = "Speaker Output";
         };
     };
 };
@@ -33,18 +33,34 @@
     pinctrl-names = "default", "sleep";
 };
 
+&pwm1 {
+    status = "okay";
+    pinctrl-0 = <&pwm1_default>;
+    pinctrl-1 = <&pwm1_sleep>;
+    pinctrl-names = "default", "sleep";
+};
+
 &pinctrl {
     pwm0_default: pwm0_default {
         group1 {
             psels = <NRF_PSEL(PWM_OUT0, 0, 13)>,  // P0.13 = Pan
-                    <NRF_PSEL(PWM_OUT1, 0, 14)>,  // P0.14 = Tilt
-                    <NRF_PSEL(PWM_OUT2, 0, 15)>;  // P0.15 = Speaker
+                    <NRF_PSEL(PWM_OUT1, 0, 14)>;  // P0.14 = Tilt
         };
     };
 
     pwm0_sleep: pwm0_sleep {
+        group1 {};
+    };
+
+    pwm1_default: pwm1_default {
         group1 {
-            /* No pins set during sleep mode (can leave empty) */
+            psels = <NRF_PSEL(PWM_OUT0, 0, 16)>;  // P0.16 = Speaker
+        };
+    };
+
+    pwm1_sleep: pwm1_sleep {
+        group1 {
+            psels = <NRF_PSEL(PWM_OUT0, 0, 16)>;
         };
     };
 };
