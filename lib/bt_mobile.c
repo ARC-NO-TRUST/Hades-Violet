@@ -77,10 +77,6 @@ void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 			ad[2].data = transmit_buffer;
 			ad[2].data_len = 20;
 
-			// transmit_buffer = "00:00:00"
-			// ad[2].data = transmit_buffer;
-			// ad[2].data_len = strlen(transmit_buffer);
-
 			int err = bt_le_adv_update_data(ad, ARRAY_SIZE(ad), NULL, 0);
 			if (err) {
 				printk("[BT MOBILE] Failed to update advertising data (err %d) - %s\n", err, transmit_buffer);
