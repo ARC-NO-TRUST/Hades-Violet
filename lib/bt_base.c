@@ -18,16 +18,17 @@ K_MSGQ_DEFINE(base_recv_message_queue, 30, 10, 1);
 static bool ad_extract_msg(struct bt_data *data, void *user_data)
 {
     char *mfg_buf = user_data;
+    const uint8_t* payload = data->data;
 
     printk("Found Manufacturer Data, %u bytes: %*ph\n", data->data_len, data->data_len, data->data);
 
     if (data->type == BT_DATA_MANUFACTURER_DATA) {
         size_t len = MIN(data->data_len, 30);
-        memcpy(mfg_buf, data->data, len);
-        mfg_buf[len] = '\0';
+        memcpy(mfg_buf, payload+2, len - 2);
+        mfg_buf[len - 2] = '\0';
         return false;
     }
-    
+
     return true;
 }
 
@@ -54,6 +55,14 @@ static void bt_base_process_data(char *msg) {
     }
 }
 
+static bool ad_debug_dump(struct bt_data *data, void *user_data)
+{
+    printk("AD type 0x%02X (%u bytes): %*ph\n",
+           data->type, data->data_len,
+           data->data_len, data->data);
+    return true; // keep parsing
+}
+
 
 static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
                          uint8_t type, struct net_buf_simple *ad)
@@ -73,6 +82,7 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
         bt_data_parse(ad, ad_extract_msg, msg);
         bt_base_process_data(msg);
     } else if (strcmp(dev, RASP_PI) == 0) {
+        bt_data_parse(ad, ad_debug_dump, NULL);
         bt_data_parse(ad, ad_extract_msg, msg);
         printk("[BASE][DEVICE] RASPBERRY PI Found - PAYLOAD: %s\n", msg);
     }
