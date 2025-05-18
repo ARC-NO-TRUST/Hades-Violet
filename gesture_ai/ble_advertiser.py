@@ -21,8 +21,8 @@ def hci_send_cmd(sock, ogf, ocf, data):
 def str_to_adv_data(s: str) -> bytes:
     company_id = b'\xFF\xFF'
     payload = company_id + s.encode("ascii")
-    total_len = len(payload)
-    return struct.pack("BB", total_len + 1, 0xFF) + payload
+    length = len(payload)  # only the payload (not including type byte)
+    return struct.pack("BB", length + 1, 0xFF) + payload  # +1 for the type byte
 
 def main(payload: str, interval_ms: int = 100):
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
