@@ -44,7 +44,7 @@ def main(payload: str, interval_ms: int = 100):
     #    - flags AD (0x01): 0x06 = GENERAL_DISCOVERABLE + NO_BREDR
     flags = b'\x02\x01\x06'
     mfg_data = str_to_adv_data(payload)
-    adv_data = (flags + mfg_data).ljust(31, b'\x00')
+    adv_data = (flags + mfg_data)
 
     # 3) LE Set Advertising Data
     print("adv_data:", adv_data.hex())
