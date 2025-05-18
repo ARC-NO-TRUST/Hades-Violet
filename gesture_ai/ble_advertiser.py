@@ -29,7 +29,7 @@ def main(payload: str, interval_ms: int = 100):
     sock.bind((HCI_DEV,))
 
     flags = b'\x02\x01\x06'
-    mfg_data = str_to_adv_data("Hi")
+    mfg_data = str_to_adv_data(payload)
     adv_data = flags + mfg_data
 
 
