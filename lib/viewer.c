@@ -92,18 +92,24 @@ static void ui_thread(void *a, void *b, void *c)
         struct adv_data item;
         if (k_msgq_get(&adv_msgq, &item, K_NO_WAIT) == 0) {
             if (strncmp(item.buf, "B1:", 3) == 0) {
-                char code = item.buf[3];
-                const char *text = NULL;
+              int cmd = -1;
+              int int_part = 0;
+              int frac_part = 0;
 
-                switch (code) {
-                    case '0': text = "GO\n";    break;
-                    case '1': text = "STOP\n";  break;
-                    case '2': text = "LEFT\n";  break;
-                    case '3': text = "RIGHT\n"; break;
-                    default:
-                        LOG_INF("Unknown command: %c", code);
-                        continue;
+              if (sscanf(item.buf + 3, "%d,%d.%d", &cmd, &int_part, &frac_part) == 3) {
+                const char *text = NULL;
+                switch (cmd) {
+                case 0: text = "GO";    break;
+                case 1: text = "STOP";  break;
+                case 2: text = "LEFT";  break;
+                case 3: text = "RIGHT"; break;
+                default:
+                  LOG_INF("Unknown gesture code: %d", cmd);
+                  continue;
                 }
+
+                char display_buf[64];
+                snprintf(display_buf, sizeof(display_buf), "%s\n%d.%02dm", text, int_part, frac_part);
 
                 // Clear previous label
                 if (direction_label) {
