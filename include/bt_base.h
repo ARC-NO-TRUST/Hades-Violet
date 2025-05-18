@@ -12,6 +12,7 @@
 #define BASE_SCAN_STACK_SIZE 2048
 #define BASE_SCAN_THREAD_PRIORITY 5
 #define NAME_THINGY "C8:AE:54:01:AC:A9 (random)"
+#define RASP_PI "D8:3A:DD:CB:40:27 (public)"
 
 // External message queue declaration
 extern struct k_msgq base_recv_message_queue;

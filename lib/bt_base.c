@@ -7,6 +7,8 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
 
+#define DEBUG
+
 static struct k_thread base_scan_thread_data;
 
 K_THREAD_STACK_DEFINE(base_scan_stack_area, BASE_SCAN_STACK_SIZE);
@@ -15,14 +17,18 @@ K_MSGQ_DEFINE(base_recv_message_queue, 30, 10, 1);
 
 static bool ad_extract_msg(struct bt_data *data, void *user_data)
 {
-  char *mfg_buf = user_data;
-  if (data->type == BT_DATA_MANUFACTURER_DATA) {
-    size_t len = MIN(data->data_len, 30);
-    memcpy(mfg_buf, data->data, len);
-    mfg_buf[len] = '\0';
-    return false;
-  }
-  return true;
+    char *mfg_buf = user_data;
+
+    printk("Found Manufacturer Data, %u bytes: %*ph\n", data->data_len, data->data_len, data->data);
+
+    if (data->type == BT_DATA_MANUFACTURER_DATA) {
+        size_t len = MIN(data->data_len, 30);
+        memcpy(mfg_buf, data->data, len);
+        mfg_buf[len] = '\0';
+        return false;
+    }
+    
+    return true;
 }
 
 static bool ad_find_name(struct bt_data *data, void *user_data)
@@ -66,6 +72,9 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
     if (strcmp(dev, NAME_THINGY) == 0) {
         bt_data_parse(ad, ad_extract_msg, msg);
         bt_base_process_data(msg);
+    } else if (strcmp(dev, RASP_PI) == 0) {
+        bt_data_parse(ad, ad_extract_msg, msg);
+        printk("[BASE][DEVICE] RASPBERRY PI Found - PAYLOAD: %s\n", msg);
     }
 
 }

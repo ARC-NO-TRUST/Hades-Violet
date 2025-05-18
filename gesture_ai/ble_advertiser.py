@@ -24,11 +24,16 @@ def hci_send_cmd(sock, ogf, ocf, data):
     sock.send(cmd_pkt)
 
 def str_to_adv_data(s: str) -> bytes:
-    b = s.encode("ascii")
-    company_id = b'\xFF\xFF'
-    payload = company_id + b
-    length = len(payload) + 1
-    return struct.pack("B", length) + b'\xFF' + payload
+    payload = s.encode("ascii")
+    company_id = b'\xFF\xFF'  # fake company ID
+    full_payload = company_id + payload  # Must start with 2-byte company ID
+
+    if len(full_payload) > 27:
+        raise ValueError("Payload too long for ADV (max 27 bytes incl. company ID)")
+
+    length = len(full_payload) + 1  # +1 for AD type byte
+    return struct.pack("B", length) + b'\xFF' + full_payload
+
 
 def main(payload: str, interval_ms: int = 100):
     # 1) open a raw HCI socket
@@ -42,6 +47,7 @@ def main(payload: str, interval_ms: int = 100):
     adv_data = (flags + mfg_data).ljust(31, b'\x00')
 
     # 3) LE Set Advertising Data
+    print("adv_data:", adv_data.hex())
     hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_DATA, adv_data)
 
     # 4) LE Set Advertising Parameters
