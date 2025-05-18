@@ -1,78 +1,91 @@
 #!/usr/bin/env python3
-import socket
-import struct
+
+import dbus
+import dbus.mainloop.glib
+import dbus.exceptions
+from gi.repository import GLib
+import sys
 import time
-import sys  # ← ✅ this is what you're missing
-import fcntl
-import os
 
-HCI_DEV = 0  # hci0
-OGF_LE_CTL = 0x08
-OCF_LE_SET_ADV_PARAM = 0x0006
-OCF_LE_SET_ADV_DATA = 0x0008
-OCF_LE_SET_ADV_ENABLE = 0x000A
+BLUEZ_SERVICE_NAME = 'org.bluez'
+ADAPTER_IFACE = 'org.bluez.Adapter1'
+ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
+ADVERTISEMENT_IFACE = 'org.bluez.LEAdvertisement1'
 
+CUSTOM_MESSAGE = "B1: 1,2.30"
 
-def hci_send_cmd(sock, ogf, ocf, data):
-    opcode = (ocf & 0x03FF) | (ogf << 10)
-    cmd = struct.pack("<BHB", 0x01, opcode, len(data)) + data
-    sock.send(cmd)
+class BLEAdvertisement(dbus.service.Object):
+    PATH_BASE = '/org/bluez/example/advertisement'
 
-def str_to_adv_data(s: str) -> bytes:
-    company_id = b'\xFF\xFF'
-    payload = company_id + s.encode("ascii")
-    length = len(payload)  # only the payload (not including type byte)
-    return struct.pack("BB", length + 1, 0xFF) + payload  # +1 for the type byte
+    def __init__(self, bus, index):
+        self.path = self.PATH_BASE + str(index)
+        self.bus = bus
+        super().__init__(bus, self.path)
 
-def main(payload: str, interval_ms: int = 100):
-    sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
-    sock.bind((HCI_DEV,))
+        self.ad_type = 'peripheral'
+        self.manufacturer_data = {
+            0xFFFF: dbus.Array(
+                [dbus.Byte(b) for b in CUSTOM_MESSAGE.encode()],
+                signature='y'
+            )
+        }
 
-    flags = b'\x02\x01\x06'
-    mfg_data = str_to_adv_data(payload)
-    adv_data = flags + mfg_data
+    def get_properties(self):
+        return {
+            ADVERTISEMENT_IFACE: {
+                'Type': self.ad_type,
+                'ManufacturerData': self.manufacturer_data,
+                'LocalName': 'RPiBLE',
+                'IncludeTxPower': dbus.Boolean(True),
+            }
+        }
 
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
 
-    if len(adv_data) > 31:
-        raise ValueError("adv_data too long")
+    @dbus.service.method(dbus_interface='org.freedesktop.DBus.Properties',
+                         in_signature='s', out_signature='a{sv}')
+    def GetAll(self, interface):
+        return self.get_properties()[interface]
 
-    print("adv_data:", adv_data.hex())
+    @dbus.service.method(ADVERTISEMENT_IFACE,
+                         in_signature='', out_signature='')
+    def Release(self):
+        print('Advertisement released')
 
-    # 1. Disable advertising first
-    hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_ENABLE, b'\x00')
+def find_adapter(bus):
+    obj = bus.get_object(BLUEZ_SERVICE_NAME, '/')
+    manager = dbus.Interface(obj, 'org.freedesktop.DBus.ObjectManager')
+    objects = manager.GetManagedObjects()
 
-    # 2. Set advertising parameters
-    iv = int(interval_ms / 0.625)
-    params = struct.pack("<HHBBB6sBB",
-        iv, iv,
-        0x00,         # ADV_IND
-        0x00,         # public addr
-        0x00,         # direct addr type
-        b'\x00' * 6,
-        0x07,         # all channels
-        0x00          # allow all
-    )
-    hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_PARAM, params)
+    for path, interfaces in objects.items():
+        if ADAPTER_IFACE in interfaces:
+            return path
+    raise Exception('Bluetooth adapter not found')
 
-    # 3. Set actual advertising data (short form)
-    hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_DATA, adv_data)
+def main():
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
 
-    # 4. Re-enable advertising
-    hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_ENABLE, b'\x01')
+    adapter_path = find_adapter(bus)
+    adapter = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter_path), ADAPTER_IFACE)
+    ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter_path), ADVERTISING_MANAGER_IFACE)
 
-    print(f"Advertising payload: {payload!r} (interval {interval_ms}ms)")
+    advertisement = BLEAdvertisement(bus, 0)
+    ad_manager.RegisterAdvertisement(advertisement.get_path(), {},
+                                     reply_handler=lambda: print("Advertisement registered"),
+                                     error_handler=lambda e: print(f"Failed to register: {e}"))
+
     try:
-        while True:
-            time.sleep(1)
+        loop = GLib.MainLoop()
+        GLib.timeout_add_seconds(15, loop.quit)  # Stop after 15 seconds
+        loop.run()
     except KeyboardInterrupt:
-        print("\nDisabling…")
-        hci_send_cmd(sock, OGF_LE_CTL, OCF_LE_SET_ADV_ENABLE, b'\x00')
-        sock.close()
+        pass
+    finally:
+        ad_manager.UnregisterAdvertisement(advertisement.get_path())
+        dbus.service.Object.remove_from_connection(advertisement)
+        print("Advertisement stopped")
 
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <your-payload-string>")
-        sys.exit(1)
-    main(sys.argv[1])
-
+if __name__ == '__main__':
+    main()
