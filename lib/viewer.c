@@ -135,7 +135,6 @@ static void init_styles(void)
 
 static void light_segments(lv_obj_t **arr, int count)
 {
-    /* colours: green (0-2), yellow (3-4), red (5-7) */
     for (int i = 0; i < SEG_CNT; ++i) seg_set_style(arr[i], &st_off);
 
     for (int i = 0; i < count && i < SEG_CNT; ++i) {
@@ -146,52 +145,44 @@ static void light_segments(lv_obj_t **arr, int count)
 }
 
 /* ───────── BLE → UI update ───────── */
-static void update_display(char code)
+static void update_display_from_ble(const char *buf)
 {
-    /* reset both sides */
-    for (int i = 0; i < SEG_CNT; ++i) {
-        seg_set_style(left_seg [i], &st_off);
-        seg_set_style(right_seg[i], &st_off);
+    int cmd = -1;
+    int int_part = 0;
+    int frac_part = 0;
+
+    if (sscanf(buf + 3, "%d,%d.%d", &cmd, &int_part, &frac_part) == 3) {
+        const char *text = NULL;
+        switch (cmd) {
+            case 0: text = "GO";    break;
+            case 1: text = "STOP";  break;
+            case 2: text = "LEFT";  break;
+            case 3: text = "RIGHT"; break;
+            default:
+                LOG_INF("Unknown gesture code: %d", cmd);
+                return;
+        }
+
+        char display_buf[64];
+        snprintf(display_buf, sizeof(display_buf), "%s\n%d.%02dm", text, int_part, frac_part);
+        lv_label_set_text(centre_lbl, display_buf);
+        lv_obj_align(centre_lbl, LV_ALIGN_CENTER, 0, 0);
+
+        light_segments(left_seg,  (cmd == 1) ? 8 : (cmd == 2) ? 6 : (cmd == 3) ? 2 : 2);
+        light_segments(right_seg, (cmd == 1) ? 8 : (cmd == 2) ? 2 : (cmd == 3) ? 6 : 2);
+
+        printk("Displayed command: %s\n", text);
     }
-
-    switch (code) {
-        case '0':   /* GO */
-            lv_label_set_text(centre_lbl, "GO");
-            light_segments(left_seg,  2);
-            light_segments(right_seg, 2);
-            break;
-
-        case '1':   /* STOP */
-            lv_label_set_text(centre_lbl, "STOP");
-            light_segments(left_seg,  8);
-            light_segments(right_seg, 8);
-            break;
-
-        case '2':   /* LEFT warning */
-            lv_label_set_text(centre_lbl, "LEFT");
-            light_segments(left_seg,  6);
-            light_segments(right_seg, 2);
-            break;
-
-        case '3':   /* RIGHT warning */
-            lv_label_set_text(centre_lbl, "RIGHT");
-            light_segments(left_seg,  2);
-            light_segments(right_seg, 6);
-            break;
-
-        default:
-            lv_label_set_text(centre_lbl, "?");
-            break;
-    }
-
-    lv_obj_align(centre_lbl, LV_ALIGN_CENTER, 0, 0);
 }
 
 /* ───────── Display + BLE init ───────── */
 static void setup_display_and_ble(void)
 {
     const struct device *disp = DEVICE_DT_GET(ILI_NODE);
-    if (!device_is_ready(disp)) { printk("Display not ready!\n"); return; }
+    if (!device_is_ready(disp)) {
+        printk("Display not ready!\n");
+        return;
+    }
 
     lv_init();
     display_blanking_off(disp);
@@ -199,7 +190,10 @@ static void setup_display_and_ble(void)
     draw_static_ui();
 
     int err = bt_enable(NULL);
-    if (err) { LOG_ERR("bt_enable: %d", err); return; }
+    if (err) {
+        LOG_ERR("bt_enable: %d", err);
+        return;
+    }
 
     err = bt_le_scan_start(&scan_param, scan_cb);
     if (err) LOG_ERR("bt_le_scan_start: %d", err);
@@ -216,9 +210,7 @@ static void ui_thread(void *a, void *b, void *c)
         struct adv_data item;
         if (k_msgq_get(&adv_msgq, &item, K_NO_WAIT) == 0) {
             if (strncmp(item.buf, "B1:", 3) == 0) {
-                char code = item.buf[3];
-                update_display(code);
-                printk("Display cmd %c\n", code);
+                update_display_from_ble(item.buf);
             }
         }
         lv_timer_handler();
