@@ -36,11 +36,11 @@ static bool ad_find_name(struct bt_data *data, void *user_data)
 {
     char *name_buf = user_data;
 
-    if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
-        size_t len = MIN(data->data_len, 31);
-        memcpy(name_buf, data->data, len);
-        name_buf[len] = '\0';
-        return false; // stop parsing, name found
+    if (data->type == BT_DATA_MANUFACTURER_DATA && data->data_len >= 3) {
+        size_t copy_len = MIN(data->data_len - 2, 30);
+        memcpy(mfg_buf, data->data + 2, copy_len);
+        mfg_buf[copy_len] = '\0';
+        return false;
     }
 
     return true; // continue parsing

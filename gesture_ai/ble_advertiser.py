@@ -24,16 +24,11 @@ def hci_send_cmd(sock, ogf, ocf, data):
     sock.send(cmd_pkt)
 
 def str_to_adv_data(s: str) -> bytes:
-    b = s.encode("ascii")
     company_id = b'\xFF\xFF'
-    payload = company_id + b
-    max_len = 31 - len(b'\x02\x01\x06')  # Subtract flags
+    payload = company_id + s.encode("ascii")
+    length = len(payload)  # this is just company_id + actual payload
+    return struct.pack("BB", length + 1, 0xFF) + payload
 
-    if len(payload) + 2 > max_len:  # +2 = length + type
-        payload = payload[:max_len - 2]  # trim
-
-    length = len(payload) + 1
-    return struct.pack("B", length) + b'\xFF' + payload
 
 def main(payload: str, interval_ms: int = 100):
     # 1) open a raw HCI socket
@@ -44,7 +39,10 @@ def main(payload: str, interval_ms: int = 100):
     #    - flags AD (0x01): 0x06 = GENERAL_DISCOVERABLE + NO_BREDR
     flags = b'\x02\x01\x06'
     mfg_data = str_to_adv_data(payload)
-    adv_data = (flags + mfg_data)
+    adv_data = flags + mfg_data
+
+    print("adv_data:", adv_data.hex())  # should be 02010605ffff4869
+
 
     # 3) LE Set Advertising Data
     print("adv_data:", adv_data.hex())
