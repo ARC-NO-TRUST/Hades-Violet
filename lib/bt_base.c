@@ -18,14 +18,13 @@ K_MSGQ_DEFINE(base_recv_message_queue, 30, 10, 1);
 static bool ad_extract_msg(struct bt_data *data, void *user_data)
 {
     char *mfg_buf = user_data;
-    const uint8_t* payload = data->data;
 
     printk("Found Manufacturer Data, %u bytes: %*ph\n", data->data_len, data->data_len, data->data);
 
-    if (data->type == BT_DATA_MANUFACTURER_DATA) {
-        size_t len = MIN(data->data_len, 30);
-        memcpy(mfg_buf, payload+2, len - 2);
-        mfg_buf[len - 2] = '\0';
+    if (data->type == BT_DATA_MANUFACTURER_DATA && data->data_len >= 3) {
+        size_t copy_len = MIN(data->data_len - 2, 30);
+        memcpy(mfg_buf, data->data + 2, copy_len);
+        mfg_buf[copy_len] = '\0';
         return false;
     }
 
@@ -36,11 +35,11 @@ static bool ad_find_name(struct bt_data *data, void *user_data)
 {
     char *name_buf = user_data;
 
-    if (data->type == BT_DATA_MANUFACTURER_DATA && data->data_len >= 3) {
-        size_t copy_len = MIN(data->data_len - 2, 30);
-        memcpy(mfg_buf, data->data + 2, copy_len);
-        mfg_buf[copy_len] = '\0';
-        return false;
+    if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
+        size_t len = MIN(data->data_len, 31);
+        memcpy(name_buf, data->data, len);
+        name_buf[len] = '\0';
+        return false; // stop parsing, name found
     }
 
     return true; // continue parsing
@@ -76,6 +75,7 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
     #ifdef DEBUG
         printk("[BASE][DEVICE]: %s, AD evt type %u, AD data len %u, RSSI %i\n",
             dev, type, ad->len, rssi);
+        printk("RAW AD DATA (%u bytes): %*ph\n", ad->len, ad->len, ad->data);
     #endif
 
     if (strcmp(dev, NAME_THINGY) == 0) {
