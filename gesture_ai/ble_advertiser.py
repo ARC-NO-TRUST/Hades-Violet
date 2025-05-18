@@ -19,22 +19,19 @@ def hci_send_cmd(sock, ogf, ocf, data):
     sock.send(cmd)
 
 def str_to_adv_data(s: str) -> bytes:
-    b = s.encode("ascii")
     company_id = b'\xFF\xFF'
-    full_payload = company_id + b
-    if len(full_payload) + 1 > 28:  # 31 - 3 (Flags AD)
-        raise ValueError("Payload too long for BLE advertising")
-
-    length = len(full_payload) + 1  # +1 for AD type
-    return struct.pack("B", length) + b'\xFF' + full_payload
+    payload = company_id + s.encode("ascii")
+    total_len = len(payload)
+    return struct.pack("BB", total_len + 1, 0xFF) + payload
 
 def main(payload: str, interval_ms: int = 100):
     sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_RAW, socket.BTPROTO_HCI)
     sock.bind((HCI_DEV,))
 
     flags = b'\x02\x01\x06'
-    mfg_data = str_to_adv_data(payload)
+    mfg_data = str_to_adv_data("Hi")
     adv_data = flags + mfg_data
+
 
     if len(adv_data) > 31:
         raise ValueError("adv_data too long")
