@@ -27,6 +27,26 @@ static bool ad_extract_msg(struct bt_data *data, void *user_data)
   return true;
 }
 
+static bool ad_extract_rpi_msg(struct bt_data *data, void *user_data)
+{
+    char *mfg_buf = user_data;
+
+    if (data->type == BT_DATA_MANUFACTURER_DATA) {
+        size_t len = MIN(data->data_len, 30);
+        // Skip the 2-byte manufacturer ID (e.g., 0xFFFF)
+        if (data->data_len > 2) {
+            memcpy(mfg_buf, data->data + 2, len - 2);
+            mfg_buf[len - 2] = '\0';
+        } else {
+            mfg_buf[0] = '\0';  // Invalid manufacturer payload
+        }
+        return false;
+    }
+
+    return true;
+}
+
+
 static bool ad_find_name(struct bt_data *data, void *user_data)
 {
     char *name_buf = user_data;
@@ -70,7 +90,7 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
         bt_base_process_data(msg);
     } else if (strcmp(dev, RASP_PI) == 0) {
         // bt_data_parse(ad, ad_debug_dump, NULL);
-        bt_data_parse(ad, ad_extract_msg, msg);
+        bt_data_parse(ad, ad_extract_rpi_msg, msg);
         printk("[BASE][DEVICE] RASPBERRY PI Found - PAYLOAD: %s\n", msg);
     }
 
