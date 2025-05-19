@@ -4,32 +4,45 @@ import subprocess
 import time
 
 def advertise_data(custom_str):
-    # Convert ASCII string to hex bytes
     ascii_bytes = [f"{ord(c):02X}" for c in custom_str]
     hex_str = " ".join(ascii_bytes)
 
-    # Build the full HCI command string
-    full_cmd = f"sudo hcitool -i hci0 cmd 0x08 0x0008 " \
-               f"{(len(ascii_bytes) + 5):02X} 02 01 06 " \
-               f"{(len(ascii_bytes) + 1):02X} FF FF FF {hex_str}"
+    # Manufacturer-specific field length = 3 bytes (FF FF FF) + data
+    manuf_len = len(ascii_bytes) + 3
 
-    # Enable Bluetooth interface and advertising
-    subprocess.run(["sudo", "hciconfig", "hci0", "up"])
-    subprocess.run(["sudo", "hciconfig", "hci0", "leadv", "0"])
+    # Total payload = flags (3 bytes) + manufacturer field
+    total_len = 3 + 1 + manuf_len  # 02 01 06 + 1-byte length prefix + manuf data
+
+    full_cmd = f"sudo hcitool -i hci0 cmd 0x08 0x0008 " \
+               f"{total_len:02X} 02 01 06 " \
+               f"{manuf_len:02X} FF FF FF {hex_str}"
+
     subprocess.run(full_cmd.split())
 
+
+def enable_advertising():
+    subprocess.run(["sudo", "hciconfig", "hci0", "up"])
+    subprocess.run(["sudo", "hciconfig", "hci0", "leadv", "0"])
+
+def disable_advertising():
+    subprocess.run(["sudo", "hciconfig", "hci0", "noleadv"])
+
 def main():
-    # Example payload — change this dynamically if needed
-    payload = "B1: 1,2.30"
-    print(f"Advertising payload: {payload}")
-    advertise_data(payload)
-    print("Advertisement started. Ctrl+C to stop.")
+    enable_advertising()
+    print("Advertisement started. Updating payload every 10 seconds. Ctrl+C to stop.")
 
     try:
+        count = 0
         while True:
-            time.sleep(10)
+            # Simulate dynamic data (you can replace this with sensor data or input)
+            distance = round(1.23 + count * 0.5, 2)
+            payload = f"B1: {count},{distance:.2f}"
+            print(f"Advertising payload: {payload}")
+            advertise_data(payload)
+            count += 1
+            time.sleep(1)
     except KeyboardInterrupt:
-        subprocess.run(["sudo", "hciconfig", "hci0", "noleadv"])
+        disable_advertising()
         print("\nAdvertisement stopped.")
 
 if __name__ == "__main__":
