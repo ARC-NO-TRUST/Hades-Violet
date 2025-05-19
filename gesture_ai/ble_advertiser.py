@@ -1,91 +1,36 @@
 #!/usr/bin/env python3
 
-import dbus
-import dbus.mainloop.glib
-import dbus.exceptions
-from gi.repository import GLib
-import sys
+import subprocess
 import time
 
-BLUEZ_SERVICE_NAME = 'org.bluez'
-ADAPTER_IFACE = 'org.bluez.Adapter1'
-ADVERTISING_MANAGER_IFACE = 'org.bluez.LEAdvertisingManager1'
-ADVERTISEMENT_IFACE = 'org.bluez.LEAdvertisement1'
+def advertise_data(custom_str):
+    # Convert ASCII string to hex bytes
+    ascii_bytes = [f"{ord(c):02X}" for c in custom_str]
+    hex_str = " ".join(ascii_bytes)
 
-CUSTOM_MESSAGE = "B1: 1,2.30"
+    # Build the full HCI command string
+    full_cmd = f"sudo hcitool -i hci0 cmd 0x08 0x0008 " \
+               f"{(len(ascii_bytes) + 5):02X} 02 01 06 " \
+               f"{(len(ascii_bytes) + 1):02X} FF FF FF {hex_str}"
 
-class BLEAdvertisement(dbus.service.Object):
-    PATH_BASE = '/org/bluez/example/advertisement'
-
-    def __init__(self, bus, index):
-        self.path = self.PATH_BASE + str(index)
-        self.bus = bus
-        super().__init__(bus, self.path)
-
-        self.ad_type = 'peripheral'
-        self.manufacturer_data = {
-            0xFFFF: dbus.Array(
-                [dbus.Byte(b) for b in CUSTOM_MESSAGE.encode()],
-                signature='y'
-            )
-        }
-
-    def get_properties(self):
-        return {
-            ADVERTISEMENT_IFACE: {
-                'Type': self.ad_type,
-                'ManufacturerData': self.manufacturer_data,
-                'LocalName': 'RPiBLE',
-                'IncludeTxPower': dbus.Boolean(True),
-            }
-        }
-
-    def get_path(self):
-        return dbus.ObjectPath(self.path)
-
-    @dbus.service.method(dbus_interface='org.freedesktop.DBus.Properties',
-                         in_signature='s', out_signature='a{sv}')
-    def GetAll(self, interface):
-        return self.get_properties()[interface]
-
-    @dbus.service.method(ADVERTISEMENT_IFACE,
-                         in_signature='', out_signature='')
-    def Release(self):
-        print('Advertisement released')
-
-def find_adapter(bus):
-    obj = bus.get_object(BLUEZ_SERVICE_NAME, '/')
-    manager = dbus.Interface(obj, 'org.freedesktop.DBus.ObjectManager')
-    objects = manager.GetManagedObjects()
-
-    for path, interfaces in objects.items():
-        if ADAPTER_IFACE in interfaces:
-            return path
-    raise Exception('Bluetooth adapter not found')
+    # Enable Bluetooth interface and advertising
+    subprocess.run(["sudo", "hciconfig", "hci0", "up"])
+    subprocess.run(["sudo", "hciconfig", "hci0", "leadv", "0"])
+    subprocess.run(full_cmd.split())
 
 def main():
-    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-    bus = dbus.SystemBus()
-
-    adapter_path = find_adapter(bus)
-    adapter = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter_path), ADAPTER_IFACE)
-    ad_manager = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, adapter_path), ADVERTISING_MANAGER_IFACE)
-
-    advertisement = BLEAdvertisement(bus, 0)
-    ad_manager.RegisterAdvertisement(advertisement.get_path(), {},
-                                     reply_handler=lambda: print("Advertisement registered"),
-                                     error_handler=lambda e: print(f"Failed to register: {e}"))
+    # Example payload — change this dynamically if needed
+    payload = "B1: 1,2.30"
+    print(f"Advertising payload: {payload}")
+    advertise_data(payload)
+    print("Advertisement started. Ctrl+C to stop.")
 
     try:
-        loop = GLib.MainLoop()
-        GLib.timeout_add_seconds(15, loop.quit)  # Stop after 15 seconds
-        loop.run()
+        while True:
+            time.sleep(10)
     except KeyboardInterrupt:
-        pass
-    finally:
-        ad_manager.UnregisterAdvertisement(advertisement.get_path())
-        dbus.service.Object.remove_from_connection(advertisement)
-        print("Advertisement stopped")
+        subprocess.run(["sudo", "hciconfig", "hci0", "noleadv"])
+        print("\nAdvertisement stopped.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

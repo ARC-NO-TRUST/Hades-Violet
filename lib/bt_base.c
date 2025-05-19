@@ -7,7 +7,7 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
 
-#define DEBUG
+//#define Debug
 
 static struct k_thread base_scan_thread_data;
 
@@ -17,18 +17,14 @@ K_MSGQ_DEFINE(base_recv_message_queue, 30, 10, 1);
 
 static bool ad_extract_msg(struct bt_data *data, void *user_data)
 {
-    char *mfg_buf = user_data;
-
-    printk("Found Manufacturer Data, %u bytes: %*ph\n", data->data_len, data->data_len, data->data);
-
-    if (data->type == BT_DATA_MANUFACTURER_DATA && data->data_len >= 3) {
-        size_t copy_len = MIN(data->data_len - 2, 30);
-        memcpy(mfg_buf, data->data + 2, copy_len);
-        mfg_buf[copy_len] = '\0';
-        return false;
-    }
-
-    return true;
+  char *mfg_buf = user_data;
+  if (data->type == BT_DATA_MANUFACTURER_DATA) {
+    size_t len = MIN(data->data_len, 30);
+    memcpy(mfg_buf, data->data, len);
+    mfg_buf[len] = '\0';
+    return false;
+  }
+  return true;
 }
 
 static bool ad_find_name(struct bt_data *data, void *user_data)
@@ -54,14 +50,6 @@ static void bt_base_process_data(char *msg) {
     }
 }
 
-static bool ad_debug_dump(struct bt_data *data, void *user_data)
-{
-    printk("AD type 0x%02X (%u bytes): %*ph\n",
-           data->type, data->data_len,
-           data->data_len, data->data);
-    return true; // keep parsing
-}
-
 
 static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
                          uint8_t type, struct net_buf_simple *ad)
@@ -75,14 +63,13 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
     #ifdef DEBUG
         printk("[BASE][DEVICE]: %s, AD evt type %u, AD data len %u, RSSI %i\n",
             dev, type, ad->len, rssi);
-        printk("RAW AD DATA (%u bytes): %*ph\n", ad->len, ad->len, ad->data);
     #endif
 
     if (strcmp(dev, NAME_THINGY) == 0) {
         bt_data_parse(ad, ad_extract_msg, msg);
         bt_base_process_data(msg);
     } else if (strcmp(dev, RASP_PI) == 0) {
-        bt_data_parse(ad, ad_debug_dump, NULL);
+        // bt_data_parse(ad, ad_debug_dump, NULL);
         bt_data_parse(ad, ad_extract_msg, msg);
         printk("[BASE][DEVICE] RASPBERRY PI Found - PAYLOAD: %s\n", msg);
     }
