@@ -22,6 +22,9 @@ LOG_MODULE_REGISTER(nrf, LOG_LEVEL_INF);
 #define TILT_UP_USEC    2000
 #define TILT_CENTER_USEC 1000
 
+#define CAM_PAN_CENTER_USEC 1300
+#define CAM_TILT_CENTER_USEC 1100
+
 static const struct pwm_dt_spec motor_pan = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_pan));
 static const struct pwm_dt_spec motor_tilt = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_tilt));
 static const struct pwm_dt_spec speaker = PWM_DT_SPEC_GET(DT_ALIAS(speaker_out));
@@ -117,13 +120,18 @@ struct bt_le_scan_param scan_param = {
     .window   = 0x0010,
 };
 
-static bool ad_find_mfg(struct bt_data *data, void *user_data)
+static bool ad_extract_rpi_msg(struct bt_data *data, void *user_data)
 {
   char *mfg_buf = user_data;
   if (data->type == BT_DATA_MANUFACTURER_DATA) {
-    size_t len = MIN(data->data_len, 15);
-    memcpy(mfg_buf, data->data, len);
-    mfg_buf[len] = '\0';
+    size_t len = MIN(data->data_len, 30);
+    // Skip the 2-byte manufacturer ID (e.g., 0xFFFF)
+    if (data->data_len > 2) {
+      memcpy(mfg_buf, data->data + 2, len - 2);
+      mfg_buf[len - 2] = '\0';
+    } else {
+      mfg_buf[0] = '\0';  // Invalid manufacturer payload
+    }
     return false;
   }
   return true;
@@ -158,21 +166,46 @@ void handle_command(int cmd)
   }
 }
 
+void handle_camera_movement(char cam_pan_buf[5], char cam_tilt_buf[5]) {
+  // Parse pan/tilt direction and offset
+  int pan_dir = cam_pan_buf[0] - '0';
+  int pan_offset = atoi(&cam_pan_buf[1]);  // parse 3 digits
+  int tilt_dir = cam_tilt_buf[0] - '0';
+  int tilt_offset = atoi(&cam_tilt_buf[1]);  // parse 3 digits
+
+  // Apply direction logic
+  int32_t cam_pan_pulse = CAM_PAN_CENTER_USEC + (pan_dir == 1 ? pan_offset : -pan_offset);
+  int32_t cam_tilt_pulse = CAM_TILT_CENTER_USEC + (tilt_dir == 1 ? tilt_offset : -tilt_offset);
+
+  pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_pan_pulse), 0);
+  pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_tilt_pulse), 0);
+
+  LOG_INF("Cam Pan PWM = %d us | Cam Tilt PWM = %d us", cam_pan_pulse, cam_tilt_pulse);
+}
+
 void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
              uint8_t type, struct net_buf_simple *ad)
 {
-  char mfg_buf[16] = {0};
-  bt_data_parse(ad, ad_find_mfg, mfg_buf);
+  char mfg_buf[32] = {0};
+  bt_data_parse(ad, ad_extract_rpi_msg, mfg_buf);
 
   if (strncmp(mfg_buf, "B1:", 3) == 0) {
     int cmd = -1;
     int int_part = 0;
     int frac_part = 0;
+    char cam_pan_buf[5] = {0};  // 4 digits + null
+    char cam_tilt_buf[5] = {0};
 
-    if (sscanf(mfg_buf + 3, "%d,%d.%d", &cmd, &int_part, &frac_part) == 3) {
-      LOG_INF("Received B1 command: %d, value: %d.%02d", cmd, int_part, frac_part);
+    if (sscanf(mfg_buf + 3, "%d,%d.%d,%4s,%4s",
+               &cmd, &int_part, &frac_part, cam_pan_buf, cam_tilt_buf) == 5) {
+
+      LOG_INF("Parsed BLE: cmd=%d, dist=%d.%02d, cam_pan=%s, cam_tilt=%s",
+              cmd, int_part, frac_part, cam_pan_buf, cam_tilt_buf);
+
+      // Convert distance and command
       handle_command(cmd);
       handle_distance(int_part, frac_part);
+      handle_camera_movement(cam_pan_buf, cam_tilt_buf);
     } else {
       LOG_WRN("Malformed B1 packet: %s", mfg_buf);
     }
@@ -201,9 +234,8 @@ void main(void)
   // Recenter servos on boot
   pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
   pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_CENTER_USEC), 0);
-
-  pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(1300), 0);
-  pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(200), 0);
+  pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(CAM_PAN_CENTER_USEC), 0);
+  pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(CAM_TILT_CENTER_USEC), 0);
 
   printk("Pan-tilt system ready\n");
 
