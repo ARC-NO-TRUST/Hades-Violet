@@ -128,7 +128,7 @@ def read_data(data_serial):
         parse_tlv_payload(payload)
 
 if __name__ == '__main__':
-    cli_port, data_port = detect_ports_windows()
+    cli_port, data_port = detect_ports_linux()
     cli = serial.Serial(cli_port, 115200, timeout=1)
     data = serial.Serial(data_port, 921600, timeout=0.5)
 
