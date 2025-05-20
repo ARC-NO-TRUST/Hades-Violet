@@ -22,7 +22,23 @@ def advertise_data(custom_str):
 
 def enable_advertising():
     subprocess.run(["sudo", "hciconfig", "hci0", "up"])
+
+    # Set fast advertising interval: 0x0014 = 20ms
+    # cmd 0x08 0x0006: Set Advertising Parameters
+    subprocess.run([
+        "sudo", "hcitool", "-i", "hci0", "cmd", "0x08", "0x0006",
+        "14", "00", "14", "00",  # min & max interval = 20ms
+        "00",                    # adv type: ADV_IND
+        "00",                    # own address type: public
+        "00",                    # direct addr type
+        "00", "00", "00", "00", "00", "00",  # direct addr (not used)
+        "07",                    # adv channel map (all channels)
+        "00"                     # filter policy: allow all
+    ])
+
+    # Enable advertising
     subprocess.run(["sudo", "hciconfig", "hci0", "leadv", "0"])
+
 
 def disable_advertising():
     subprocess.run(["sudo", "hciconfig", "hci0", "noleadv"])
