@@ -1,11 +1,6 @@
 #!/usr/bin/env python3
 """
-Threaded pose detector with head tracking
-  - Yellow box = whole body
-  - Purple box = head landmarks
-  - Big pose label: STOP / GO / LEFT / RIGHT (debounced)
-  - When head goes off-centre, prints "MOVE LEFT"/"MOVE RIGHT"
-  - FPS overlay
+Threaded pose detector with ESP32-CAM input and head tracking
 """
 
 import cv2, math, time, threading
@@ -18,17 +13,15 @@ ANGLE_GO, ANGLE_LR = 35, 25
 OUT_GO, OUT_LR     = 0.70, 0.50
 BUF_LEN, REQUIRED  = 6, 4
 FPS_ALPHA          = 0.2
-# Head-centering thresholds (0 … 1, 0.5=center)
 HEAD_LEFT_LIMIT  = 0.35
 HEAD_RIGHT_LIMIT = 0.65
-# ─────────────────────────────────────────────────────────
 
 mp_d, mp_p = mp.solutions.drawing_utils, mp.solutions.pose
 
-# ── threaded camera ─────────────────────────────────────
+# ── threaded ESP32-CAM video stream ─────────────────────
 class Camera:
-    def __init__(self, src=0):
-        self.cap = cv2.VideoCapture(src)
+    def __init__(self, stream_url):
+        self.cap = cv2.VideoCapture(stream_url)
         self.frame, self.lock, self.stop = None, threading.Lock(), False
         threading.Thread(target=self._loop, daemon=True).start()
     def _loop(self):
@@ -74,7 +67,7 @@ def body_box(lm, w, h, margin=60):
     return x1,y1,x2,y2
 
 def head_box(lm, w, h, margin=20):
-    idx = [0,1,2,3,4,5,6,7,8]   # nose, eyes, ears
+    idx = [0,1,2,3,4,5,6,7,8]
     xs=[lm[i].x for i in idx]; ys=[lm[i].y for i in idx]
     x1=max(0,int(min(xs)*w)-margin); y1=max(0,int(min(ys)*h)-margin)
     x2=min(w,int(max(xs)*w)+margin); y2=min(h,int(max(ys)*h)+margin)
@@ -82,7 +75,8 @@ def head_box(lm, w, h, margin=20):
 
 # ── main loop ────────────────────────────────────────────
 def main():
-    cam = Camera(0)
+    # Replace with your ESP32-CAM IP address
+    cam = Camera("http://172.20.10.3:81/stream")
     buf, deb_pose, last_print = deque(maxlen=BUF_LEN), "NONE", "NONE"
     prev, fps_ema = time.time(), 0.0
     last_move = "CENTER"
@@ -106,15 +100,12 @@ def main():
                 raw = classify(lm)
                 mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
 
-                # yellow body box
                 bx1,by1,bx2,by2 = body_box(lm,w,h,60)
                 cv2.rectangle(img,(bx1,by1),(bx2,by2),(0,255,255),3)
 
-                # purple head box
                 hx1,hy1,hx2,hy2,head_cx_norm = head_box(lm,w,h,20)
                 cv2.rectangle(img,(hx1,hy1),(hx2,hy2),(255,0,255),3)
 
-                # --- servo simulation ---
                 if head_cx_norm < HEAD_LEFT_LIMIT:
                     move="MOVE LEFT"
                 elif head_cx_norm > HEAD_RIGHT_LIMIT:
@@ -126,27 +117,26 @@ def main():
                     print(move)
                     last_move = move
 
-            # debounce pose
             buf.append(raw)
             top=max(set(buf),key=buf.count)
             if buf.count(top)>=REQUIRED: deb_pose=top
 
-            # big pose label
-            font,sc,th=cv2.FONT_HERSHEY_SIMPLEX,2.0,4
-            tw,_=cv2.getTextSize(deb_pose,font,sc,th)[0]
-            cv2.putText(img,deb_pose,((w-tw)//2,70),font,sc,(0,0,255),th,cv2.LINE_AA)
+            # ⬇️ SMALLER LABEL TEXT
+            font, sc, th = cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
+            tw,_ = cv2.getTextSize(deb_pose, font, sc, th)[0]
+            cv2.putText(img, deb_pose, (10, 20), font, sc, (0,0,255), th, cv2.LINE_AA)
 
-            # FPS
-            now=time.time(); fps=1/(now-prev); prev=now
-            fps_ema=fps if fps_ema==0 else FPS_ALPHA*fps+(1-FPS_ALPHA)*fps_ema
-            cv2.putText(img,f"{fps_ema:5.1f} FPS",(10,h-30),
-                        cv2.FONT_HERSHEY_SIMPLEX,1.3,(0,255,0),3)
+            # ⬇️ SMALLER FPS TEXT
+            now = time.time(); fps = 1/(now-prev); prev = now
+            fps_ema = fps if fps_ema == 0 else FPS_ALPHA*fps + (1-FPS_ALPHA)*fps_ema
+            cv2.putText(img, f"{fps_ema:4.1f} FPS", (10, h-10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
 
-            if deb_pose!=last_print:
-                print(">>>",deb_pose); last_print=deb_pose
+            if deb_pose != last_print:
+                print(">>>", deb_pose); last_print = deb_pose
 
-            cv2.imshow("Pose + HeadBox",img)
-            if cv2.waitKey(1)&0xFF in (27,ord('q')): break
+            cv2.imshow("Pose + HeadBox", img)
+            if cv2.waitKey(1)&0xFF in (27, ord('q')): break
 
     cam.release(); cv2.destroyAllWindows()
 
