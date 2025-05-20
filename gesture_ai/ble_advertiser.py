@@ -54,11 +54,11 @@ def main():
         while True:
             # Simulate dynamic data (you can replace this with sensor data or input)
             distance = round(1.23 + count * 0.5, 2)
-            payload = f"B1: {count},{distance:.2f}"
+            payload = f"B1:{count},{distance:.2f}"
             print(f"Advertising payload: {payload}")
             advertise_data(payload)
             count += 1
-            time.sleep(1)
+            time.sleep(3)
     except KeyboardInterrupt:
         disable_advertising()
         print("\nAdvertisement stopped.")
