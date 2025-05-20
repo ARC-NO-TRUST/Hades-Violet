@@ -61,28 +61,25 @@ class PID:
         self.prev_output = raw_output
         return raw_output
 
-# ── Sweeper ───────────────────────────
+# ── Sweeping Search Mode ────────────────────
 class SweepSearch:
-    def __init__(self, pan_range=60, tilt_range=30, step=15):  # Larger step for faster sweep
+    def __init__(self, pan_range=60, step=2):
         self.pan_range = pan_range
-        self.tilt_range = tilt_range
         self.step = step
         self.angle = 0
         self.direction = 1
-
     def update(self):
         self.angle += self.step * self.direction
         if self.angle >= 360 or self.angle <= 0:
             self.direction *= -1
             self.angle = max(min(self.angle, 359), 0)
         pan = int(self.pan_range * math.cos(math.radians(self.angle)))
-        tilt = int(self.tilt_range * math.sin(math.radians(self.angle)))
-        return pan, tilt
+        return pan
 
 # ── Pose Helpers ───────────────────────────
 def horiz_angle(w, s):
-    deg = abs(math.degrees(math.atan2(w.y - s.y, w.x - s.x)))
-    return min(deg, 180 - deg)
+    deg = abs(math.degrees(math.atan2(w.y-s.y, w.x-s.x)))
+    return min(deg, 180-deg)
 
 def classify(lm):
     rs, ls = lm[mp_p.PoseLandmark.RIGHT_SHOULDER], lm[mp_p.PoseLandmark.LEFT_SHOULDER]
@@ -107,17 +104,16 @@ def classify(lm):
         return "RIGHT"
     return "NONE"
 
-def head_box(lm, w, h, margin=20):
-    idx = [0,1,2,3,4,5,6,7,8]
-    xs = [lm[i].x for i in idx]
-    ys = [lm[i].y for i in idx]
+def body_box(lm, w, h, margin=60):
+    xs = [p.x for p in lm]
+    ys = [p.y for p in lm]
     x1 = max(0, int(min(xs) * w) - margin)
     y1 = max(0, int(min(ys) * h) - margin)
     x2 = min(w, int(max(xs) * w) + margin)
     y2 = min(h, int(max(ys) * h) + margin)
-    return x1, y1, x2, y2, (sum(xs) / len(xs))
+    return x1, y1, x2, y2, abs(x2 - x1)
 
-# ── Main ───────────────────────────
+# ── Main App ────────────────────────────────
 def main():
     cam = Camera("http://172.20.10.3:81/stream")
     advertiser = BLEAdvertiserThread()
@@ -125,8 +121,6 @@ def main():
 
     buf, deb_pose = deque(maxlen=BUF_LEN), "NONE"
     prev, fps_ema = time.time(), 0.0
-    lost_counter = 0
-    SWAP_THRESHOLD = 15
 
     screen_w, screen_h = 1280, 720
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
@@ -135,7 +129,7 @@ def main():
     pid_pan = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
     pid_tilt = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
 
-    sweeper = SweepSearch(pan_range=50, tilt_range=30, step=15)
+    sweeper = SweepSearch(pan_range=50, step=2)
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
                    min_tracking_confidence=.5) as pose:
@@ -143,37 +137,30 @@ def main():
             while True:
                 frame = cam.read()
                 if frame is None:
-                    time.sleep(0.001)
-                    continue
+                    time.sleep(0.001); continue
                 h, w = frame.shape[:2]
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                rgb.flags.writeable = False
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); rgb.flags.writeable = False
                 res = pose.process(rgb)
                 img = frame.copy()
                 raw = "NONE"
 
                 if res.pose_landmarks:
-                    lost_counter = 0
                     lm = res.pose_landmarks.landmark
                     raw = classify(lm)
                     mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
 
-                    hx1, hy1, hx2, hy2, _ = head_box(lm, w, h, 20)
-                    cv2.rectangle(img, (hx1, hy1), (hx2, hy2), (255, 0, 255), 3)
-                    head_cx, head_cy = (hx1 + hx2) // 2, (hy1 + hy2) // 2
-                    err_x = w // 2 - head_cx
-                    err_y = h // 2 - head_cy
+                    bx1, by1, bx2, by2, _ = body_box(lm, w, h, 60)
+                    cx, cy = (bx1 + bx2) // 2, (by1 + by2) // 2
+                    err_x = w // 2 - cx
+                    err_y = h // 2 - cy
+                    cv2.rectangle(img, (bx1, by1), (bx2, by2), (0, 255, 255), 3)
 
                     pan_output = pid_pan.update(err_x)
                     tilt_output = pid_tilt.update(err_y)
                 else:
-                    lost_counter += 1
-                    if lost_counter >= SWAP_THRESHOLD:
-                        pan_output, tilt_output = sweeper.update()
-                    else:
-                        pan_output = tilt_output = 0
+                    pan_output = sweeper.update()
+                    tilt_output = 0  # Keep tilt fixed during sweep
 
-                # BLE packaging
                 pan_dir = 1 if pan_output >= 0 else 0
                 pan_off = min(abs(int(pan_output)), 999)
                 pan_payload = pan_dir * 1000 + pan_off
@@ -192,15 +179,13 @@ def main():
 
                 cv2.putText(img, deb_pose, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
                 now = time.time()
-                fps = 1 / (now - prev)
-                prev = now
+                fps = 1 / (now - prev); prev = now
                 fps_ema = fps if fps_ema == 0 else FPS_ALPHA * fps + (1 - FPS_ALPHA) * fps_ema
                 cv2.putText(img, f"{fps_ema:4.1f} FPS", (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
 
                 img = cv2.resize(img, (screen_w, screen_h), interpolation=cv2.INTER_LINEAR)
                 cv2.imshow("Pose + HeadBox", img)
-                if cv2.waitKey(1) & 0xFF in (27, ord('q')):
-                    break
+                if cv2.waitKey(1) & 0xFF in (27, ord('q')): break
         finally:
             advertiser.stop()
             advertiser.join()
