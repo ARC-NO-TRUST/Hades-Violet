@@ -99,11 +99,12 @@ static void bt_base_scan_cb(const bt_addr_le_t *addr, int8_t rssi,
 int bt_base_start_scan(void)
 {
     struct bt_le_scan_param scan_param = {
-		.type       = BT_LE_SCAN_TYPE_PASSIVE,
-		.options    = BT_LE_SCAN_OPT_NONE,
-		.interval   = BT_GAP_SCAN_FAST_INTERVAL ,
-		.window     = BT_GAP_SCAN_FAST_WINDOW,
-	};
+        .type     = BT_LE_SCAN_TYPE_PASSIVE,
+        .options  = BT_LE_SCAN_OPT_NONE,
+        .interval = 0x0020,  // 32 * 0.625 ms = 20 ms
+        .window   = 0x0020,  // 32 * 0.625 ms = 20 ms
+    };
+
     
     int err;
     err = bt_le_scan_start(&scan_param, bt_base_scan_cb);
