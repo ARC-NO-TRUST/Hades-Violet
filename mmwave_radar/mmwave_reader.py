@@ -40,30 +40,28 @@ def send_config(cli_serial, cfg_file_path):
 def parse_tlv_payload(payload):
     idx = 0
     while idx + 8 <= len(payload):
-        tlv_type, tlv_length = struct.unpack_from('<II', payload, idx)
+        try:
+            tlv_type, tlv_length = struct.unpack_from('<II', payload, idx)
+        except Exception as e:
+            print(f"[TLV PARSE ERROR] Failed to unpack: {e}")
+            break
+
         idx += 8
         print(f"\nTLV type: {tlv_type}, length: {tlv_length}")
 
-        if tlv_length == 0 or tlv_type != 6:
-            print("Invalid or unsupported TLV. Skipping.")
-            idx += max(tlv_length - 8, 0)
+        if tlv_length < 8 or tlv_length > len(payload) - (idx - 8):
+            print("Invalid TLV length. Skipping.")
             continue
 
-        obj_data = payload[idx:idx + tlv_length - 8]
-        num_points = len(obj_data) // 16
-        print(f"Detected {num_points} points")
+        tlv_payload = payload[idx:idx + tlv_length - 8]
 
-        for i in range(num_points):
-            start = i * 16
-            raw_bytes = obj_data[start:start+16]
-            x, y, z, v = struct.unpack_from('<ffff', raw_bytes)
-
-            print(f"\nPoint {i+1}")
-            for j, label in enumerate(['x', 'y', 'z', 'v']):
-                f_val = struct.unpack_from('<f', raw_bytes, j*4)[0]
-                u32_bits = struct.unpack_from('<I', raw_bytes, j*4)[0]
-                bit_str = format(u32_bits, '032b')
-                print(f"{label}: {f_val:.6f} | bits: {bit_str}")
+        if tlv_type == 1:
+            print("Detected object TLV (type 1) — implement decoder here.")
+            # placeholder: implement object decoding logic
+        elif tlv_type == 7:
+            print("Stats or noise floor TLV — skipping or log info.")
+        else:
+            print("Unknown or unsupported TLV type. Skipping.")
 
         idx += tlv_length - 8
 
