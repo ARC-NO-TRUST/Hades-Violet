@@ -38,7 +38,7 @@ class Camera:
 
 # ── PID ───────────────────────────
 class PID:
-    def __init__(self, kp, ki, kd, deadband=10, max_change=15):
+    def __init__(self, kp, ki, kd, deadband=1, max_change=30):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -126,10 +126,10 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    pid_pan = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
-    pid_tilt = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
+    pid_pan = PID(2.5, 0.1, 0.2, deadband=1, max_change=50)
+    pid_tilt = PID(2.5, 0.1, 0.2, deadband=1, max_change=50)
 
-    sweeper = SweepSearch(pan_range=50, step=2)
+    sweeper = SweepSearch(pan_range=80, step=30)
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
                    min_tracking_confidence=.5) as pose:
