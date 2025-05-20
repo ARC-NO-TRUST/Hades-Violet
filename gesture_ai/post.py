@@ -11,7 +11,7 @@ ANGLE_GO, ANGLE_LR = 35, 25
 OUT_GO, OUT_LR = 0.70, 0.50
 BUF_LEN, REQUIRED = 6, 4
 FPS_ALPHA = 0.2
-HEAD_LEFT_LIMIT  = 0.35
+HEAD_LEFT_LIMIT = 0.35
 HEAD_RIGHT_LIMIT = 0.65
 
 mp_d, mp_p = mp.solutions.drawing_utils, mp.solutions.pose
@@ -78,10 +78,21 @@ class SweepSearch:
         tilt = int(self.tilt_range * math.sin(math.radians(self.angle)))
         return pan, tilt
 
+# ── Format Output ───────────────────────────
+def encode_axis(value, axis):
+    magnitude = min(abs(int(round(value))), 127)
+    if axis == "pan":
+        direction = 1 if value >= 0 else 0  # 0 = left, 1 = right
+    elif axis == "tilt":
+        direction = 1 if value >= 0 else 0  # 0 = up, 1 = down
+    else:
+        direction = 0
+    return f"{direction}{magnitude:03d}"
+
 # ── Pose Helpers ────────────────────────────
 def horiz_angle(w, s):
-    deg = abs(math.degrees(math.atan2(w.y-s.y, w.x-s.x)))
-    return min(deg, 180-deg)
+    deg = abs(math.degrees(math.atan2(w.y - s.y, w.x - s.x)))
+    return min(deg, 180 - deg)
 
 def classify(lm):
     rs, ls = lm[mp_p.PoseLandmark.RIGHT_SHOULDER], lm[mp_p.PoseLandmark.LEFT_SHOULDER]
@@ -116,7 +127,7 @@ def body_box(lm, w, h, margin=60):
     return x1, y1, x2, y2
 
 def head_box(lm, w, h, margin=20):
-    idx = [0,1,2,3,4,5,6,7,8]
+    idx = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     xs = [lm[i].x for i in idx]
     ys = [lm[i].y for i in idx]
     x1 = max(0, int(min(xs) * w) - margin)
@@ -125,7 +136,7 @@ def head_box(lm, w, h, margin=20):
     y2 = min(h, int(max(ys) * h) + margin)
     return x1, y1, x2, y2, (sum(xs) / len(xs))
 
-# ── Main App ────────────────────────────────
+# ── Main Application ────────────────────────
 def main():
     cam = Camera("http://172.20.10.3:81/stream")
     buf, deb_pose, last_print = deque(maxlen=BUF_LEN), "NONE", "NONE"
@@ -137,7 +148,6 @@ def main():
 
     pid_pan = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
     pid_tilt = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
-
     sweeper = SweepSearch(pan_range=40, tilt_range=20, step=4)
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
@@ -166,13 +176,18 @@ def main():
                 err_x, err_y = cx - w // 2, cy - h // 2
                 pan_output = pid_pan.update(err_x)
                 tilt_output = pid_tilt.update(err_y)
-                print(f"pan:{int(pan_output):+04d}, tilt:{int(tilt_output):+04d}")
+
+                pan_msg = encode_axis(pan_output, "pan")
+                tilt_msg = encode_axis(tilt_output, "tilt")
+                print(f"{pan_msg},{tilt_msg}")
 
                 hx1, hy1, hx2, hy2, head_cx_norm = head_box(lm, w, h, 20)
                 cv2.rectangle(img, (hx1, hy1), (hx2, hy2), (255, 0, 255), 3)
             else:
                 pan_output, tilt_output = sweeper.update()
-                print(f"[SEARCH] pan:{pan_output:+04d}, tilt:{tilt_output:+04d}")
+                pan_msg = encode_axis(pan_output, "pan")
+                tilt_msg = encode_axis(tilt_output, "tilt")
+                print(f"{pan_msg},{tilt_msg}")
 
             buf.append(raw)
             top = max(set(buf), key=buf.count)
