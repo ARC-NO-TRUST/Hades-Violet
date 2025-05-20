@@ -6,23 +6,15 @@ import sys
 
 CFG_FILE = 'config.cfg'
 
-def detect_ports():
-    ports = list(serial.tools.list_ports.comports())
-    cli_port = None
-    data_port = None
-
-    for p in ports:
-        if 'XDS110 Class Application/User UART' in p.description:
-            cli_port = p.device
-        elif 'XDS110 Class Auxiliary Data Port' in p.description:
-            data_port = p.device
-
-    if not cli_port or not data_port:
-        print("Could not detect both CLI and DATA ports.")
-        print("Detected ports:")
-        for p in ports:
-            print(f"- {p.device}: {p.description}")
+def detect_ports_linux():
+    ports = [p.device for p in serial.tools.list_ports.comports() if 'ttyACM' in p.device]
+    if len(ports) < 2:
+        print("Could not detect both CLI and DATA ports (ACM). Found:", ports)
         sys.exit(1)
+
+    ports.sort()  # Ensure ttyACM0 is CLI and ttyACM1 is DATA
+    cli_port = ports[0]
+    data_port = ports[1]
 
     print(f"CLI Port:  {cli_port}")
     print(f"Data Port: {data_port}")
@@ -42,7 +34,7 @@ def send_config(cli_serial, cfg_file_path):
                 resp = cli_serial.readline().decode(errors='ignore').strip()
                 print("  <-", resp)
                 if "sensorStart" in line:
-                    print("ensorStart sent")
+                    print("sensorStart sent")
                     return
 
 def read_data(data_serial):
@@ -61,7 +53,7 @@ def read_data(data_serial):
             continue
 
 if __name__ == '__main__':
-    cli_port, data_port = detect_ports()
+    cli_port, data_port = detect_ports_linux()
     cli = serial.Serial(cli_port, 115200, timeout=1)
     data = serial.Serial(data_port, 921600, timeout=0.5)
 
