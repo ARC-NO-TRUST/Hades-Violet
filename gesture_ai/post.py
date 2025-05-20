@@ -36,16 +36,32 @@ class Camera:
 
 # ── PID Controller ──────────────────────────
 class PID:
-    def __init__(self, kp, ki, kd):
-        self.kp, self.ki, self.kd = kp, ki, kd
+    def __init__(self, kp, ki, kd, deadband=10, max_change=5):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
         self.prev_error = 0
         self.integral = 0
+        self.prev_output = 0
+        self.deadband = deadband
+        self.max_change = max_change
 
     def update(self, error):
+        if abs(error) < self.deadband:
+            return 0  # ignore small jitter
+
         self.integral += error
         derivative = error - self.prev_error
         self.prev_error = error
-        return self.kp * error + self.ki * self.integral + self.kd * derivative
+        raw_output = self.kp * error + self.ki * self.integral + self.kd * derivative
+
+        # Clamp sudden changes
+        delta = raw_output - self.prev_output
+        if abs(delta) > self.max_change:
+            raw_output = self.prev_output + self.max_change * (1 if delta > 0 else -1)
+
+        self.prev_output = raw_output
+        return raw_output
 
 # ── Sweeping Search Mode ────────────────────
 class SweepSearch:
@@ -119,8 +135,9 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    pid_pan = PID(0.4, 0.01, 0.2)
-    pid_tilt = PID(0.4, 0.01, 0.2)
+    pid_pan = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
+    pid_tilt = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
+
     sweeper = SweepSearch(pan_range=40, tilt_range=20, step=4)
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
