@@ -171,12 +171,11 @@ def main():
 
                     pan_dir = 1 if pan_output >= 0 else 0
                     pan_off = min(abs(int(pan_output)), 999)
-                    pan_payload = f"{pan_dir}{pan_off:03d}"
+                    pan_payload = pan_dir * 1000 + pan_off  # e.g. 1*1000 + 23 → 1023
 
                     tilt_dir = 1 if tilt_output >= 0 else 0
                     tilt_off = min(abs(int(tilt_output)), 999)
-                    tilt_payload = f"{tilt_dir}{tilt_off:03d}"
-                    print("hi")
+                    tilt_payload = tilt_dir * 1000 + tilt_off  # e.g. 0*1000 + 47 → 47
 
                     # Send to BLE advertiser
                     advertiser.update_pan(pan_payload)
