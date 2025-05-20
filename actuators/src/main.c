@@ -22,9 +22,11 @@ LOG_MODULE_REGISTER(nrf, LOG_LEVEL_INF);
 #define TILT_UP_USEC    2000
 #define TILT_CENTER_USEC 1000
 
-static const struct pwm_dt_spec pan = PWM_DT_SPEC_GET(DT_ALIAS(servo_pan));
-static const struct pwm_dt_spec tilt = PWM_DT_SPEC_GET(DT_ALIAS(servo_tilt));
+static const struct pwm_dt_spec motor_pan = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_pan));
+static const struct pwm_dt_spec motor_tilt = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_tilt));
 static const struct pwm_dt_spec speaker = PWM_DT_SPEC_GET(DT_ALIAS(speaker_out));
+static const struct pwm_dt_spec cam_pan = PWM_DT_SPEC_GET(DT_ALIAS(cam_servo_pan));
+static const struct pwm_dt_spec cam_tilt = PWM_DT_SPEC_GET(DT_ALIAS(cam_servo_tilt));
 
 #define STACK_SIZE 2048
 #define PRIORITY 5
@@ -131,23 +133,23 @@ void handle_command(int cmd)
 {
   switch (cmd) {
   case 0: // GO
-    pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
-    pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
+    pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
+    pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
     LOG_INF("[ACTION] GO");
     break;
   case 1: // STOP
-    pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
-    pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
+    pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_UP_USEC), 0);
+    pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
     LOG_INF("[ACTION] STOP");
     break;
   case 2: // LEFT
-    pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_LEFT_USEC), 0);
-    pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
+    pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_LEFT_USEC), 0);
+    pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
     LOG_INF("[ACTION] LEFT");
     break;
   case 3: // RIGHT
-    pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_RIGHT_USEC), 0);
-    pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
+    pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_RIGHT_USEC), 0);
+    pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_DOWN_USEC), 0);
     LOG_INF("[ACTION] RIGHT");
     break;
   default:
@@ -190,14 +192,18 @@ void bt_scan_thread_fn(void)
 
 void main(void)
 {
-  if (!device_is_ready(pan.dev) || !device_is_ready(tilt.dev)) {
+  if (!device_is_ready(motor_pan.dev) || !device_is_ready(motor_tilt.dev)
+      || !device_is_ready(cam_pan.dev) || !device_is_ready(cam_tilt.dev)) {
     printk("Error: Servo device(s) not ready\n");
     return;
   }
 
   // Recenter servos on boot
-  pwm_set(pan.dev, pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
-  pwm_set(tilt.dev, tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_CENTER_USEC), 0);
+  pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
+  pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_CENTER_USEC), 0);
+
+  pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(1300), 0);
+  pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(200), 0);
 
   printk("Pan-tilt system ready\n");
 
