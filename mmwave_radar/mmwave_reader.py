@@ -44,22 +44,26 @@ def parse_tlv_payload(payload):
         idx += 8
         print(f"\nTLV type: {tlv_type}, length: {tlv_length}")
 
-        if tlv_type == 6:
-            obj_data = payload[idx:idx + tlv_length - 8]
-            num_points = len(obj_data) // 16
-            print(f"Detected {num_points} points")
+        if tlv_length == 0 or tlv_type != 6:
+            print("Invalid or unsupported TLV. Skipping.")
+            idx += max(tlv_length - 8, 0)
+            continue
 
-            for i in range(num_points):
-                start = i * 16
-                raw_bytes = obj_data[start:start+16]
-                x, y, z, v = struct.unpack_from('<ffff', raw_bytes)
+        obj_data = payload[idx:idx + tlv_length - 8]
+        num_points = len(obj_data) // 16
+        print(f"Detected {num_points} points")
 
-                print(f"\nPoint {i+1}")
-                for j, label in enumerate(['x', 'y', 'z', 'v']):
-                    f_val = struct.unpack_from('<f', raw_bytes, j*4)[0]
-                    u32_bits = struct.unpack_from('<I', raw_bytes, j*4)[0]
-                    bit_str = format(u32_bits, '032b')
-                    print(f"{label}: {f_val:.6f} | bits: {bit_str}")
+        for i in range(num_points):
+            start = i * 16
+            raw_bytes = obj_data[start:start+16]
+            x, y, z, v = struct.unpack_from('<ffff', raw_bytes)
+
+            print(f"\nPoint {i+1}")
+            for j, label in enumerate(['x', 'y', 'z', 'v']):
+                f_val = struct.unpack_from('<f', raw_bytes, j*4)[0]
+                u32_bits = struct.unpack_from('<I', raw_bytes, j*4)[0]
+                bit_str = format(u32_bits, '032b')
+                print(f"{label}: {f_val:.6f} | bits: {bit_str}")
 
         idx += tlv_length - 8
 
@@ -69,15 +73,25 @@ def read_data(data_serial):
 
     while True:
         sync = data_serial.read(8)
-        if sync == MAGIC_WORD:
-            header = sync + data_serial.read(32)
-            total_packet_len = struct.unpack('<I', header[12:16])[0]
-            payload_len = total_packet_len - len(header)
-            payload = data_serial.read(payload_len)
-            print(f"\nFrame received: {total_packet_len} bytes")
-            parse_tlv_payload(payload)
-        else:
+        if sync != MAGIC_WORD:
             continue
+
+        header = sync + data_serial.read(32)
+        total_packet_len = struct.unpack('<I', header[12:16])[0]
+
+        if total_packet_len < 40 or total_packet_len > 8192:
+            print(f"Invalid total_packet_len: {total_packet_len}. Skipping.")
+            continue
+
+        payload_len = total_packet_len - len(header)
+        payload = data_serial.read(payload_len)
+
+        if len(payload) != payload_len:
+            print(f"Incomplete payload: expected {payload_len}, got {len(payload)}. Skipping frame.")
+            continue
+
+        print(f"\nFrame received: {total_packet_len} bytes")
+        parse_tlv_payload(payload)
 
 if __name__ == '__main__':
     cli_port, data_port = detect_ports_linux()
