@@ -75,11 +75,16 @@ def head_box(lm, w, h, margin=20):
 
 # ── main loop ────────────────────────────────────────────
 def main():
-    # Replace with your ESP32-CAM IP address
     cam = Camera("http://172.20.10.3:81/stream")
     buf, deb_pose, last_print = deque(maxlen=BUF_LEN), "NONE", "NONE"
     prev, fps_ema = time.time(), 0.0
     last_move = "CENTER"
+
+    # Screen dimensions for full-screen scaling
+    screen_w, screen_h = 1280, 720  # Adjust based on your display
+
+    cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
+    cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
                    min_tracking_confidence=.5) as pose:
@@ -121,12 +126,12 @@ def main():
             top=max(set(buf),key=buf.count)
             if buf.count(top)>=REQUIRED: deb_pose=top
 
-            # ⬇️ SMALLER LABEL TEXT
+            # Label text
             font, sc, th = cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2
             tw,_ = cv2.getTextSize(deb_pose, font, sc, th)[0]
             cv2.putText(img, deb_pose, (10, 20), font, sc, (0,0,255), th, cv2.LINE_AA)
 
-            # ⬇️ SMALLER FPS TEXT
+            # FPS text
             now = time.time(); fps = 1/(now-prev); prev = now
             fps_ema = fps if fps_ema == 0 else FPS_ALPHA*fps + (1-FPS_ALPHA)*fps_ema
             cv2.putText(img, f"{fps_ema:4.1f} FPS", (10, h-10),
@@ -134,6 +139,9 @@ def main():
 
             if deb_pose != last_print:
                 print(">>>", deb_pose); last_print = deb_pose
+
+            # 🔍 Resize to full screen resolution
+            img = cv2.resize(img, (screen_w, screen_h), interpolation=cv2.INTER_LINEAR)
 
             cv2.imshow("Pose + HeadBox", img)
             if cv2.waitKey(1)&0xFF in (27, ord('q')): break
