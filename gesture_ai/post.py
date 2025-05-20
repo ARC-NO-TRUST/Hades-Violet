@@ -7,7 +7,7 @@ import mediapipe as mp
 import sys
 
 # Add your module path
-sys.path.append("/Users/ceylan/csse4011/csse4011Project")
+sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
 
 # ── Configuration ───────────────────────────
@@ -29,7 +29,8 @@ class Camera:
         while not self.stop:
             ok, f = self.cap.read()
             if ok:
-                with self.lock: self.frame = f
+                with self.lock:
+                    self.frame = f
     def read(self):
         with self.lock:
             return None if self.frame is None else self.frame.copy()
@@ -39,7 +40,7 @@ class Camera:
 
 # ── PID Controller ──────────────────────────
 class PID:
-    def __init__(self, kp, ki, kd, deadband=10, max_change=5):
+    def __init__(self, kp, ki, kd, deadband=10, max_change=15):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -136,8 +137,8 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    pid_pan = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
-    pid_tilt = PID(0.4, 0.01, 0.2, deadband=15, max_change=4)
+    pid_pan = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
+    pid_tilt = PID(0.5, 0.01, 0.3, deadband=10, max_change=15)
 
     sweeper = SweepSearch(pan_range=40, tilt_range=20, step=4)
 
@@ -165,19 +166,20 @@ def main():
                     cv2.rectangle(img, (bx1, by1), (bx2, by2), (0,255,255), 3)
 
                     cx, cy = (bx1 + bx2) // 2, (by1 + by2) // 2
-                    err_x, err_y = cx - w // 2, cy - h // 2
+                    err_x = w // 2 - cx  # invert direction
+                    err_y = h // 2 - cy
+
                     pan_output = pid_pan.update(err_x)
                     tilt_output = pid_tilt.update(err_y)
 
                     pan_dir = 1 if pan_output >= 0 else 0
                     pan_off = min(abs(int(pan_output)), 999)
-                    pan_payload = pan_dir * 1000 + pan_off  # e.g. 1*1000 + 23 → 1023
+                    pan_payload = pan_dir * 1000 + pan_off
 
                     tilt_dir = 1 if tilt_output >= 0 else 0
                     tilt_off = min(abs(int(tilt_output)), 999)
-                    tilt_payload = tilt_dir * 1000 + tilt_off  # e.g. 0*1000 + 47 → 47
+                    tilt_payload = tilt_dir * 1000 + tilt_off
 
-                    # Send to BLE advertiser
                     advertiser.update_pan(pan_payload)
                     advertiser.update_tilt(tilt_payload)
 
@@ -185,8 +187,17 @@ def main():
                     cv2.rectangle(img, (hx1, hy1), (hx2, hy2), (255, 0, 255), 3)
                 else:
                     pan_output, tilt_output = sweeper.update()
-                    advertiser.update_pan(0)
-                    advertiser.update_tilt(0)
+
+                    pan_dir = 1 if pan_output >= 0 else 0
+                    pan_off = min(abs(int(pan_output)), 999)
+                    pan_payload = pan_dir * 1000 + pan_off
+
+                    tilt_dir = 1 if tilt_output >= 0 else 0
+                    tilt_off = min(abs(int(tilt_output)), 999)
+                    tilt_payload = tilt_dir * 1000 + tilt_off
+
+                    advertiser.update_pan(pan_payload)
+                    advertiser.update_tilt(tilt_payload)
 
                 buf.append(raw)
                 top = max(set(buf), key=buf.count)
