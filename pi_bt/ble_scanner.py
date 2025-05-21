@@ -2,8 +2,10 @@ from bluepy.btle import Scanner, DefaultDelegate
 import threading
 import time
 import binascii
+import queue
 
-TARGET_MAC = "c8:ae:54:01:ac:a9"
+THINGY52_MAC = "c8:ae:54:01:ac:a9"
+ULTRASONIC_MAC = ""
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
@@ -12,25 +14,39 @@ class ScanDelegate(DefaultDelegate):
 class BLEScannerThread(threading.Thread):
     def __init__(self, scan_interval=5.0, pause_interval=0.5):
         super().__init__()
+        self._data_queue = queue.Queue()  # shared queue
         self.scanner = Scanner().withDelegate(ScanDelegate())
         self.scan_interval = scan_interval
         self.pause_interval = pause_interval
         self._stop_event = threading.Event()
+    
+    def get_queue(self):
+        return self._data_queue
 
-    def decode_data(self, adtype, desc, value):
-        if desc == "Manufacturer":
+    def add_to_queue(self, name, addr, data):
+        self._data_queue.put({"name": name, "addr":addr, "value":data})
+    
+    def extract_payload(value):
+        try:
+            raw_bytes = bytes.fromhex(value)
+            payload = raw_bytes[:11]
             try:
-                raw_bytes = bytes.fromhex(value)
-                payload = raw_bytes[:11]
+                return {"value": payload.decode("utf-8").strip(), "encoding": "utf-8"}
+            except UnicodeDecodeError:
+                return {"value": payload.hex(), "encoding": "hex"}
+        except Exception as e:
+            print(f"    ▸ Decode error: {e}")
+            return None
 
-                try:
-                    decoded = payload.decode("utf-8").strip()
-                    print(f"    ▸ Payload (UTF-8): {decoded}")
-                except UnicodeDecodeError:
-                    print(f"    ▸ Payload (hex)  : {payload.hex()}")
-
-            except Exception as e:
-                print(f"    ▸ Decode error: {e}")
+    def handle_advertisement_data(self, adtype, desc, value, dev_name, dev_addr):
+        if desc == "Manufacturer":
+            result = self.extract_payload(value)
+            if result:
+                if result["encoding"] == "utf-8":
+                    print(f"    ▸ Payload (UTF-8): {result['value']}")
+                else:
+                    print(f"    ▸ Payload (hex)  : {result['value']}")
+                self.add_to_queue(dev_name, dev_addr, result["value"])
         elif desc == "Complete Local Name":
             print(f"    ▸ Device Name: {value}")
         else:
@@ -45,10 +61,15 @@ class BLEScannerThread(threading.Thread):
                 devices = self.scanner.scan(self.scan_interval)
 
                 for dev in devices:
-                    if dev.addr.lower() == TARGET_MAC:
-                        print(f"\n[FOUND] Device {dev.addr} (RSSI={dev.rssi} dB)")
+                    dev_addr = dev.addr
+                    if dev_addr.lower() == THINGY52_MAC:
+                        print(f"\n[FOUND] THINGY52: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
-                            self.decode_data(adtype, desc, value)
+                            self.handle_advertisement_data(adtype, desc, value, "THINGY52", dev_addr)
+                    elif dev_addr.lower() == ULTRASONIC_MAC:
+                        print(f"\n[FOUND] ULTRASONIC: Device {dev_addr} (RSSI={dev.rssi} dB)")
+                        for (adtype, desc, value) in dev.getScanData():
+                            self.handle_advertisement_data(adtype, desc, value, "ULTRASONIC", dev_addr)
 
                 print(f"[SCANNER] Sleeping {self.pause_interval} seconds...\n")
                 time.sleep(self.pause_interval)
@@ -65,10 +86,21 @@ if __name__ == "__main__":
     scanner_thread = BLEScannerThread(scan_interval=5.0, pause_interval=1.0)
     scanner_thread.start()
 
+    print("[MAIN] Scanner thread started. Waiting for BLE advertisements...\n")
+
     try:
         while True:
-            time.sleep(0.1)
+            try:
+                data = scanner_thread.get_queue().get(timeout=1.0)
+                name = data["name"]
+                addr = data["addr"]
+                value = data["value"]
+                print(f"[MAIN] Received from {name} ({addr}): {value}")
+            except queue.Empty:
+                print("[MAIN] No BLE data received in this interval.")
     except KeyboardInterrupt:
-        print("\n[MAIN] Stopping scanner thread...")
+        print("\n[MAIN] KeyboardInterrupt received. Stopping scanner thread...")
         scanner_thread.stop()
         scanner_thread.join()
+        print("[MAIN] Scanner thread stopped. Exiting.")
+
