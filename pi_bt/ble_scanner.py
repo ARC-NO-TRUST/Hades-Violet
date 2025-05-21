@@ -109,7 +109,7 @@ if __name__ == "__main__":
                 name = data["name"]
                 addr = data["addr"]
                 value = data["value"]
-                print(f"[MAIN] Received from {name} ({addr}): {value}")
+                print(f"[MAIN] Received from {name} ({addr}): {value}\n")
             except queue.Empty:
                 print("[MAIN] No BLE data received in this interval.")
     except KeyboardInterrupt:
