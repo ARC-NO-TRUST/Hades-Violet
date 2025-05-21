@@ -141,12 +141,11 @@ def extract_tilt(payload):
 
 
 def extract_ultrasonic(payload):
-    """Extracts float distance from 'U1:<int>,<frac>'."""
+    """Extracts float distance from 'U1:<int>.<decimal>'."""
     if payload.startswith("U1:"):
         try:
-            int_part, frac_part = payload[3:].split(",")
-            return float(f"{int(int_part)}.{int(frac_part)}")
-        except (ValueError, IndexError):
+            return float(payload[3:].strip())
+        except ValueError:
             pass
     return None
 

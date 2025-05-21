@@ -71,15 +71,15 @@ class BLEScannerThread(threading.Thread):
                     if dev_addr.lower() == MOBILE_MAC:
                         print(f"\n[FOUND] THINGY52: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
-                            self.handle_advertisement_data(adtype, desc, value, "MOBILE", dev_addr)
+                            self.handle_advertisement_data(adtype, desc, value, MOBILE_NAME, dev_addr)
                     elif dev_addr.lower() == ULTRASONIC_MAC:
                         print(f"\n[FOUND] NRF_ULTRASONIC: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
-                            self.handle_advertisement_data(adtype, desc, value, "ULTRASONIC", dev_addr)
+                            self.handle_advertisement_data(adtype, desc, value, ULTRASONIC_NAME, dev_addr)
                     elif dev_addr.lower() == ACTUATOR_MAC:
                         print(f"\n[FOUND] NRF_ACTUATOR: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
-                            self.handle_advertisement_data(adtype, desc, value, "ACTUATOR", dev_addr)
+                            self.handle_advertisement_data(adtype, desc, value, ACTUATOR_NAME, dev_addr)
                     # else:
                     #     # print(f"\n[FOUND] UNKNOWN DEVICE: {dev_addr} (RSSI={dev.rssi} dB)")
                     #     # for (adtype, desc, value) in dev.getScanData():
