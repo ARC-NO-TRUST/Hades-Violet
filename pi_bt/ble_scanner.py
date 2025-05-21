@@ -80,10 +80,10 @@ class BLEScannerThread(threading.Thread):
                         print(f"\n[FOUND] NRF_ACTUATOR: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
                             self.handle_advertisement_data(adtype, desc, value, "ACTUATOR", dev_addr)
-                    else:
-                        print(f"\n[FOUND] UNKNOWN DEVICE: {dev_addr} (RSSI={dev.rssi} dB)")
-                        for (adtype, desc, value) in dev.getScanData():
-                            print(f"    ▸ {desc}: {value}")
+                    # else:
+                    #     # print(f"\n[FOUND] UNKNOWN DEVICE: {dev_addr} (RSSI={dev.rssi} dB)")
+                    #     # for (adtype, desc, value) in dev.getScanData():
+                    #     #     print(f"    ▸ {desc}: {value}")
 
                 print(f"[SCANNER] Sleeping {self.pause_interval} seconds...\n")
                 time.sleep(self.pause_interval)
