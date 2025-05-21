@@ -31,11 +31,31 @@ static const struct pwm_dt_spec speaker = PWM_DT_SPEC_GET(DT_ALIAS(speaker_out))
 static const struct pwm_dt_spec cam_pan = PWM_DT_SPEC_GET(DT_ALIAS(cam_servo_pan));
 static const struct pwm_dt_spec cam_tilt = PWM_DT_SPEC_GET(DT_ALIAS(cam_servo_tilt));
 
+static bool sweep_pan = false;
+static bool sweep_tilt = false;
+static struct k_timer sweep_timer;
+static int32_t cam_pan_pos = CAM_PAN_CENTER_USEC;
+static int32_t cam_tilt_pos = CAM_TILT_CENTER_USEC;
+static int pan_dir_inc = 10;
+static int tilt_dir_inc = 10;
+
+#define AD_QUEUE_SIZE 10
+#define AD_QUEUE_ALIGN sizeof(int32_t)
+
+struct cam_position {
+  int32_t pan;
+  int32_t tilt;
+};
+
+K_MSGQ_DEFINE(pos_msgq, sizeof(struct cam_position), AD_QUEUE_SIZE, AD_QUEUE_ALIGN);
+
 #define STACK_SIZE 2048
 #define PRIORITY 5
 
 K_THREAD_STACK_DEFINE(bt_scan_stack, STACK_SIZE);
 static struct k_thread bt_scan_thread_data;
+K_THREAD_STACK_DEFINE(bt_ad_stack, STACK_SIZE);
+static struct k_thread bt_ad_thread_data;
 K_THREAD_STACK_DEFINE(tone_stack_area, STACK_SIZE);
 static struct k_thread tone_thread_data;
 
@@ -99,6 +119,69 @@ void tone_thread_fn(void *arg1, void *arg2, void *arg3)
     play_tone(1000, 200); // Always beep for 200 ms
     k_msleep(gap_duration); // Wait before next beep
   }
+}
+
+void bt_advertising_pos_thread(void)
+{
+  struct cam_position pos;
+
+  while (1) {
+    if (k_msgq_get(&pos_msgq, &pos, K_FOREVER) == 0) {
+      // Construct message
+      char adv_data[32];
+      snprintf(adv_data, sizeof(adv_data), "A1:%ld,%ld", (long)pos.pan, (long)pos.tilt);
+
+      struct bt_data ad[] = {
+          BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
+          BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, strlen(CONFIG_BT_DEVICE_NAME)),
+          BT_DATA(BT_DATA_MANUFACTURER_DATA, adv_data, strlen(adv_data)),
+      };
+
+      bt_le_adv_stop();
+
+      int err = bt_le_adv_start(BT_LE_ADV_PARAM(
+                                BT_LE_ADV_OPT_USE_IDENTITY,
+                                BT_GAP_ADV_FAST_INT_MIN_2,
+                                BT_GAP_ADV_FAST_INT_MAX_2,
+                                NULL),
+                            ad, ARRAY_SIZE(ad), NULL, 0);
+      if (err) {
+        LOG_ERR("Advertising failed: %d", err);
+      } else {
+        LOG_INF("Advertising cam_pan_pos = %ld, cam_tilt_pos = %ld", (long)pos.pan, (long)pos.tilt);
+      }
+
+      k_sleep(K_MSEC(500));
+    }
+  }
+}
+
+void sweep_timer_handler(struct k_timer *dummy)
+{
+
+  if (sweep_pan) {
+    cam_pan_pos += pan_dir_inc;
+    if (cam_pan_pos >= PAN_LEFT_USEC || cam_pan_pos <= PAN_RIGHT_USEC) {
+      pan_dir_inc = -pan_dir_inc;
+    }
+    pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_pan_pos), 0);
+  }
+
+  if (sweep_tilt) {
+    cam_tilt_pos += tilt_dir_inc;
+    // Tilt bounds - not that extreme
+    if (cam_tilt_pos >= 1400 || cam_tilt_pos <= 800) {
+      tilt_dir_inc = -tilt_dir_inc;
+    }
+    pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_tilt_pos), 0);
+  }
+
+  // Always advertise the current cam_pan and cam_tilt position
+  struct cam_position pos = {
+      .pan = cam_pan_pos,
+      .tilt = cam_tilt_pos
+  };
+  k_msgq_put(&pos_msgq, &pos, K_NO_WAIT);
 }
 
 void handle_distance(int int_part, int frac_part)
@@ -167,20 +250,36 @@ void handle_command(int cmd)
 }
 
 void handle_camera_movement(char cam_pan_buf[5], char cam_tilt_buf[5]) {
-  // Parse pan/tilt direction and offset
   int pan_dir = cam_pan_buf[0] - '0';
-  int pan_offset = atoi(&cam_pan_buf[1]);  // parse 3 digits
+  int pan_offset = atoi(&cam_pan_buf[1]);
   int tilt_dir = cam_tilt_buf[0] - '0';
-  int tilt_offset = atoi(&cam_tilt_buf[1]);  // parse 3 digits
+  int tilt_offset = atoi(&cam_tilt_buf[1]);
 
-  // Apply direction logic
-  int32_t cam_pan_pulse = CAM_PAN_CENTER_USEC + (pan_dir == 1 ? pan_offset : -pan_offset);
-  int32_t cam_tilt_pulse = CAM_TILT_CENTER_USEC + (tilt_dir == 1 ? tilt_offset : -tilt_offset);
+  // Check for sweep mode
+  if (pan_dir == 2) {
+    sweep_pan = true;
+  } else {
+    sweep_pan = false;
+  }
+  if (tilt_dir == 2) {
+    sweep_tilt = true;
+  } else {
+    sweep_tilt = false;
+  }
 
-  pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_pan_pulse), 0);
-  pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_tilt_pulse), 0);
+  if (!sweep_pan) {
+    int32_t cam_pan_pulse = CAM_PAN_CENTER_USEC + (pan_dir == 1 ? pan_offset : -pan_offset);
+    pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_pan_pulse), 0);
+    cam_pan_pos = cam_pan_pulse;
+  }
 
-  LOG_INF("Cam Pan PWM = %d us | Cam Tilt PWM = %d us", cam_pan_pulse, cam_tilt_pulse);
+  if (!sweep_tilt) {
+    int32_t cam_tilt_pulse = CAM_TILT_CENTER_USEC + (tilt_dir == 1 ? tilt_offset : -tilt_offset);
+    pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(cam_tilt_pulse), 0);
+    cam_tilt_pos = cam_tilt_pulse;
+  }
+
+  LOG_INF("Cam Pan Mode: %s, Cam Tilt Mode: %s", sweep_pan ? "SWEEP" : "NO SWEEP", sweep_tilt ? "SWEEP" : "NO SWEEP");
 }
 
 void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
@@ -231,6 +330,9 @@ void main(void)
     return;
   }
 
+  k_timer_init(&sweep_timer, sweep_timer_handler, NULL);
+  k_timer_start(&sweep_timer, K_MSEC(0), K_MSEC(100));
+
   // Recenter servos on boot
   pwm_set(motor_pan.dev, motor_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(PAN_CENTER_USEC), 0);
   pwm_set(motor_tilt.dev, motor_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(TILT_CENTER_USEC), 0);
@@ -247,6 +349,9 @@ void main(void)
 
   k_thread_create(&bt_scan_thread_data, bt_scan_stack, STACK_SIZE,
                   (k_thread_entry_t)bt_scan_thread_fn,
+                  NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
+  k_thread_create(&bt_ad_thread_data, bt_ad_stack, STACK_SIZE,
+                  (k_thread_entry_t)bt_advertising_pos_thread,
                   NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
   k_thread_create(&tone_thread_data, tone_stack_area, K_THREAD_STACK_SIZEOF(tone_stack_area),
                   tone_thread_fn, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);

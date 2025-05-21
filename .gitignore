@@ -147,3 +147,4 @@ viewer/build/
 build/
 /gesture_ai/venv/
 actuators/build/
+ultrasonic/build/
