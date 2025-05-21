@@ -61,6 +61,24 @@ static bool ad_find_name(struct bt_data *data, void *user_data)
     return true; // continue parsing
 }
 
+void bt_base_print_address(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);  // ✅ no return value
+
+    if (count == 0) {
+        printk("[CENTRAL][ERROR] No local Bluetooth address found\n");
+        return;
+    }
+
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(&addrs[0], addr_str, sizeof(addr_str));
+    printk("[CENTRAL][INFO] Local Bluetooth Address: %s\n", addr_str);
+}
+
+
 static void bt_base_process_data(char *msg) {
     int ret = k_msgq_put(&base_recv_message_queue, msg, K_NO_WAIT);
     if (ret != 0) {
@@ -122,6 +140,7 @@ void base_scan_thread_fn(void *p1, void *p2, void *p3)
     ARG_UNUSED(p3);
 
     printk("[CENTRAL]Starting Central Thread\n");
+    bt_base_print_address();
     (void)bt_base_start_scan();
     printk("[CENTRAL]Exiting Central Thread\n");
 

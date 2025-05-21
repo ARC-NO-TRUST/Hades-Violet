@@ -5,7 +5,7 @@ import binascii
 import queue
 
 THINGY52_MAC = "c8:ae:54:01:ac:a9"
-ULTRASONIC_MAC = ""
+ULTRASONIC_MAC = "FD:E2:2A:BA:F9:F1"
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):

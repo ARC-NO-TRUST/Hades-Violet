@@ -22,5 +22,6 @@ int bt_base_start_scan(void);
 void start_mobile_scan_thread(void);
 void base_scan_thread_fn(void *p1, void *p2, void *p3);
 void start_mobile_scan_thread(void);
+void bt_base_print_address(void);
 
 #endif // BT_BASE_H

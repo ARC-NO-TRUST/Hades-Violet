@@ -50,6 +50,23 @@ int bt_mobile_start_ad(void) {
 	return 0;
 }
 
+void print_bt_address(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    int err = bt_id_get(addrs, &count);
+    if (err || count == 0) {
+        printk("[BT MAC] Failed to get local address (err %d)\n", err);
+        return;
+    }
+
+    char addr_str[BT_ADDR_LE_STR_LEN];
+    bt_addr_le_to_str(&addrs[0], addr_str, sizeof(addr_str));
+    printk("[BT MAC] Local Bluetooth Address: %s\n", addr_str);
+}
+
+
 void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1);
@@ -107,4 +124,6 @@ void mobile_bluetooth_init(void) {
                 BT_PRIORITY, 0, K_NO_WAIT);
 
 }
+
+
 
