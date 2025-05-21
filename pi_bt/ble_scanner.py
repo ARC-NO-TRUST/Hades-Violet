@@ -4,8 +4,13 @@ import time
 import binascii
 import queue
 
-THINGY52_MAC = "c8:ae:54:01:ac:a9"
+MOBILE_MAC = "c8:ae:54:01:ac:a9"
 ULTRASONIC_MAC = "FD:E2:2A:BA:F9:F1"
+ACTUATOR_MAC = "F1:63:1E:D2:07:0F"
+
+MOBILE_NAME = "MOBILE"
+ULTRASONIC_NAME = "ULTRASONIC"
+ACTUATOR_MAC = "ACTUATOR"
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
@@ -29,7 +34,7 @@ class BLEScannerThread(threading.Thread):
     def extract_payload(value):
         try:
             raw_bytes = bytes.fromhex(value)
-            payload = raw_bytes[:11]
+            payload = raw_bytes  
             try:
                 return {"value": payload.decode("utf-8").strip(), "encoding": "utf-8"}
             except UnicodeDecodeError:
@@ -37,6 +42,7 @@ class BLEScannerThread(threading.Thread):
         except Exception as e:
             print(f"    ▸ Decode error: {e}")
             return None
+
 
     def handle_advertisement_data(self, adtype, desc, value, dev_name, dev_addr):
         if desc == "Manufacturer":
@@ -62,14 +68,18 @@ class BLEScannerThread(threading.Thread):
 
                 for dev in devices:
                     dev_addr = dev.addr
-                    if dev_addr.lower() == THINGY52_MAC:
+                    if dev_addr.lower() == MOBILE_MAC:
                         print(f"\n[FOUND] THINGY52: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
-                            self.handle_advertisement_data(adtype, desc, value, "THINGY52", dev_addr)
+                            self.handle_advertisement_data(adtype, desc, value, "MOBILE", dev_addr)
                     elif dev_addr.lower() == ULTRASONIC_MAC:
-                        print(f"\n[FOUND] ULTRASONIC: Device {dev_addr} (RSSI={dev.rssi} dB)")
+                        print(f"\n[FOUND] NRF_ULTRASONIC: Device {dev_addr} (RSSI={dev.rssi} dB)")
                         for (adtype, desc, value) in dev.getScanData():
                             self.handle_advertisement_data(adtype, desc, value, "ULTRASONIC", dev_addr)
+                    elif dev_addr.lower() == ACTUATOR_MAC:
+                        print(f"\n[FOUND] NRF_ACTUATOR: Device {dev_addr} (RSSI={dev.rssi} dB)")
+                        for (adtype, desc, value) in dev.getScanData():
+                            self.handle_advertisement_data(adtype, desc, value, "ACTUATOR", dev_addr)
 
                 print(f"[SCANNER] Sleeping {self.pause_interval} seconds...\n")
                 time.sleep(self.pause_interval)
