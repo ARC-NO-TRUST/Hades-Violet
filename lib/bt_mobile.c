@@ -93,7 +93,7 @@ void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 		
 		if (k_msgq_get(&accel_message_queue, &msg, K_FOREVER) == 0) {
 			// snprintf(transmit_buffer, sizeof(transmit_buffer), 
-			// 	"%03d:%03d:%03d", msg.x, msg.y, msg.z);
+			// 	"M1:%03d,%03d,%03d", msg.x, msg.y, msg.z);
 			int distance_int = (distance_cycle_index / 2);
 			int distance_frac = (distance_cycle_index % 2 == 0) ? 20 : 70;
 

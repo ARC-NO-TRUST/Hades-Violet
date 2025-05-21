@@ -5,9 +5,12 @@ import threading
 from collections import deque
 import mediapipe as mp
 import sys
+import queue
+from queue import Empty
 
 sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
+from pi_bt.ble_scanner import BLEScannerThread
 
 # ── Configuration ───────────────────────────
 MIRRORED = True
@@ -114,11 +117,63 @@ def body_box(lm, w, h, margin=60):
     y2 = min(h, int(max(ys) * h) + margin)
     return x1, y1, x2, y2, abs(x2 - x1)
 
+
+def extract_pan(payload):
+    """Extracts the pan value from 'A1:<pan>,<tilt>'."""
+    if payload.startswith("A1:"):
+        try:
+            pan_str = payload[3:].split(",")[0]
+            return int(pan_str)
+        except (IndexError, ValueError):
+            pass
+    return None
+
+
+def extract_tilt(payload):
+    """Extracts the tilt value from 'A1:<pan>,<tilt>'."""
+    if payload.startswith("A1:"):
+        try:
+            tilt_str = payload[3:].split(",")[1]
+            return int(tilt_str)
+        except (IndexError, ValueError):
+            pass
+    return None
+
+
+def extract_ultrasonic(payload):
+    """Extracts float distance from 'U1:<int>,<frac>'."""
+    if payload.startswith("U1:"):
+        try:
+            int_part, frac_part = payload[3:].split(",")
+            return float(f"{int(int_part)}.{int(frac_part)}")
+        except (ValueError, IndexError):
+            pass
+    return None
+
+
+def extract_accel(payload):
+    """Extracts x, y, z from 'M1:x,y,z'."""
+    if payload.startswith("M1:"):
+        try:
+            parts = payload[3:].split(",")
+            if len(parts) != 3:
+                return None
+            x, y, z = map(int, parts)
+            return {"x": x, "y": y, "z": z}
+        except ValueError:
+            pass
+    return None
+
+
+
 # ── Main App ────────────────────────────────
 def main():
     cam = Camera("http://172.20.10.3:81/stream")
     advertiser = BLEAdvertiserThread()
+    scanner = BLEScannerThread()
     advertiser.start()
+    scanner.start()
+    scanner_queue = scanner.get_queue()
 
     buf, deb_pose = deque(maxlen=BUF_LEN), "NONE"
     prev, fps_ema = time.time(), 0.0
@@ -134,6 +189,8 @@ def main():
     last_seen_time = time.time()
     LOST_TIMEOUT = 2.0
     track_mode = True
+    pan, tilt, dist = 0
+    accel_pos = {"x": 0, "y": 0, "z":0}
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
                    min_tracking_confidence=.5) as pose:
@@ -208,6 +265,36 @@ def main():
                 cv2.imshow("Pose + HeadBox", img)
                 if cv2.waitKey(1) & 0xFF in (27, ord('q')):
                     break
+
+                # BLE Advertising Packet extraction
+                try:
+                    msg = scanner_queue.get_nowait()
+                    name = msg["name"]
+                    value = msg["value"]
+
+                    if name == "MOBILE" and value.startswith("M1:"):
+                        new_pos = extract_accel(value)
+                        new_pos = extract_accel(value)
+                        if new_pos:
+                            accel_pos.update(new_pos)
+                            print(f"[SCAN][MOBILE] ACCEL POS - X: {accel_pos['x']}, Y: {accel_pos['y']}, Z: {accel_pos['z']}\n")
+                        else:
+                            print("[SCAN][MOBILE] Invalid accelerometer payload:", value)
+
+                    elif name == "ULTRASONIC" and value.startswith("U1:"):
+                        distance = extract_ultrasonic(value)
+                        print(f"[SCAN][ULTRASONIC] DISTANCE: {distance} m \n")
+
+                    elif name == "ACTUATOR" and value.startswith("A1:"):
+                        pan = extract_pan(value)
+                        tilt = extract_tilt(value)
+                        print(f"[SCAN][MOBILE] PAN: {pan}, TILT: {tilt} \n")
+
+                    else:
+                        print(f"[SCAN][UNKNOWN] ({name}): {value}\n")
+
+                except Empty:
+                    pass
         finally:
             advertiser.stop()
             advertiser.join()
