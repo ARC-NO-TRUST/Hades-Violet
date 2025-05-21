@@ -10,7 +10,7 @@ ACTUATOR_MAC = "f1:63:1e:d2:07:0f"
 
 MOBILE_NAME = "MOBILE"
 ULTRASONIC_NAME = "ULTRASONIC"
-ACTUATOR_MAC = "ACTUATOR"
+ACTUATOR_NAME = "ACTUATOR"
 
 class ScanDelegate(DefaultDelegate):
     def __init__(self):
