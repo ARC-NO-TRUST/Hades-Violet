@@ -189,7 +189,7 @@ def main():
     last_seen_time = time.time()
     LOST_TIMEOUT = 2.0
     track_mode = True
-    pan, tilt, dist = 0
+    pan, tilt, dist = 0, 0, 0
     accel_pos = {"x": 0, "y": 0, "z":0}
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
