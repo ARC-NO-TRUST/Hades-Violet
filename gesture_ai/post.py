@@ -296,7 +296,9 @@ def main():
                     pass
         finally:
             advertiser.stop()
+            scanner.stop()
             advertiser.join()
+            scanner.join()
 
     cam.release()
     cv2.destroyAllWindows()
