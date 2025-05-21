@@ -5,8 +5,8 @@ import binascii
 import queue
 
 MOBILE_MAC = "c8:ae:54:01:ac:a9"
-ULTRASONIC_MAC = "FD:E2:2A:BA:F9:F1"
-ACTUATOR_MAC = "F1:63:1E:D2:07:0F"
+ULTRASONIC_MAC = "fd:e2:2a:Ba:f9:f1"
+ACTUATOR_MAC = "f1:63:1e:d2:07:0f"
 
 MOBILE_NAME = "MOBILE"
 ULTRASONIC_NAME = "ULTRASONIC"
