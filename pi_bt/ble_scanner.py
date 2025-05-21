@@ -31,7 +31,7 @@ class BLEScannerThread(threading.Thread):
     def add_to_queue(self, name, addr, data):
         self._data_queue.put({"name": name, "addr":addr, "value":data})
     
-    def extract_payload(value):
+    def extract_payload(self, value):
         try:
             raw_bytes = bytes.fromhex(value)
             payload = raw_bytes  
