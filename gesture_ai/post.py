@@ -18,7 +18,6 @@ FPS_ALPHA = 0.2
 
 mp_d, mp_p = mp.solutions.drawing_utils, mp.solutions.pose
 
-# ── Camera ───────────────────────────
 class Camera:
     def __init__(self, stream_url):
         self.cap = cv2.VideoCapture(stream_url)
@@ -37,7 +36,6 @@ class Camera:
         self.stop = True
         self.cap.release()
 
-# ── PID ───────────────────────────
 class PID:
     def __init__(self, kp, ki, kd, deadband=1, max_change=30):
         self.kp = kp
@@ -62,7 +60,6 @@ class PID:
         self.prev_output = raw_output
         return raw_output
 
-# ── Sweeping Search Mode ────────────────────
 class SweepSearch:
     def __init__(self, pan_range=60, step=2):
         self.pan_range = pan_range
@@ -77,7 +74,6 @@ class SweepSearch:
         pan = int(self.pan_range * math.cos(math.radians(self.angle)))
         return pan
 
-# ── Pose Helpers ───────────────────────────
 def horiz_angle(w, s):
     deg = abs(math.degrees(math.atan2(w.y - s.y, w.x - s.x)))
     return min(deg, 180 - deg)
@@ -114,7 +110,6 @@ def body_box(lm, w, h, margin=60):
     y2 = min(h, int(max(ys) * h) + margin)
     return x1, y1, x2, y2, abs(x2 - x1)
 
-# ── Main App ────────────────────────────────
 def main():
     cam = Camera("http://172.20.10.14:81/stream")
     advertiser = BLEAdvertiserThread()
@@ -128,15 +123,13 @@ def main():
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     pid_pan = PID(2.5, 0.1, 0.2, deadband=1, max_change=50)
-    pid_tilt = PID(2.5, 0.1, 0.2, deadband=1, max_change=50)
     sweeper = SweepSearch(pan_range=80, step=2)
 
     last_seen_time = time.time()
     LOST_TIMEOUT = 2.0
     track_mode = True
 
-    with mp_p.Pose(model_complexity=0, min_detection_confidence=.5,
-                   min_tracking_confidence=.5) as pose:
+    with mp_p.Pose(model_complexity=0, min_detection_confidence=.5, min_tracking_confidence=.5) as pose:
         try:
             while True:
                 frame = cam.read()
@@ -162,11 +155,7 @@ def main():
                     bx1, by1, bx2, by2, _ = body_box(lm, w, h, 60)
                     cx, cy = (bx1 + bx2) // 2, (by1 + by2) // 2
                     err_x = w // 2 - cx
-                    err_y = h // 2 - cy
-                    cv2.rectangle(img, (bx1, by1), (bx2, by2), (0, 255, 255), 3)
-
                     pan_output = pid_pan.update(err_x)
-                    tilt_output = pid_tilt.update(err_y)
 
                 else:
                     if time.time() - last_seen_time > LOST_TIMEOUT:
@@ -174,20 +163,17 @@ def main():
                             print("[INFO] Lost body, sending sweep command to base.")
                         track_mode = False
                         advertiser.update_pan(2000)
-                        advertiser.update_tilt(2000)
-                        continue  # skip rest of loop while sweeping
+                        advertiser.update_tilt(1000)  # Fixed to -45°
+                        continue
                     else:
                         pan_output = pid_pan.prev_output * 0.9
-                        tilt_output = pid_tilt.prev_output * 0.9
-
 
                 pan_dir = 1 if pan_output >= 0 else 0
                 pan_off = min(abs(int(pan_output)), 999)
                 pan_payload = pan_dir * 1000 + pan_off
 
-                tilt_dir = 1 if tilt_output >= 0 else 0
-                tilt_off = min(abs(int(tilt_output)), 999)
-                tilt_payload = tilt_dir * 1000 + tilt_off
+                # Fixed tilt to +45° when tracking, -45° when sweeping
+                tilt_payload = 1000 if track_mode else 0  # 1 for +45°, 0 for -45°
 
                 advertiser.update_pan(pan_payload)
                 advertiser.update_tilt(tilt_payload)
