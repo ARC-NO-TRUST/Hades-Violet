@@ -44,7 +44,7 @@ class Camera:
 
 # ─── PID ──────────────────────────────────────────────────────────
 class PID:
-    def __init__(self, kp, ki, kd, deadband=1, max_change=30):
+    def __init__(self, kp, ki, kd, deadband=3, max_change=30):
         self.kp,self.ki,self.kd = kp,ki,kd
         self.prev_err = 0
         self.integral = 0
@@ -101,8 +101,8 @@ def main():
     cam = Camera("http://172.20.10.14:81/stream")
     ble = BLEAdvertiserThread(); ble.start()
 
-    pid_pan  = PID(2.5,.1,.2, deadband=1, max_change=50)
-    pid_tilt = PID(2.5,.1,.2, deadband=1, max_change=50)
+    pid_pan  = PID(2.5,.1,.2, deadband=3, max_change=50)
+    pid_tilt = PID(2.5,.1,.2, deadband=3, max_change=50)
 
     buf, deb_pose = deque(maxlen=BUF_LEN), "NONE"
     last_seen = time.time()
