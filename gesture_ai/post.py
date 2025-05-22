@@ -37,7 +37,7 @@ class Camera:
         self.cap.release()
 
 class PID:
-    def __init__(self, kp, ki, kd, deadband=1, max_change=30):
+    def __init__(self, kp, ki, kd, deadband=3, max_change=50):
         self.kp = kp
         self.ki = ki
         self.kd = kd
