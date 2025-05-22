@@ -116,7 +116,7 @@ def body_box(lm, w, h, margin=60):
 
 # ── Main App ────────────────────────────────
 def main():
-    cam = Camera("http://172.20.10.3:81/stream")
+    cam = Camera("http://172.20.10.14:81/stream")
     advertiser = BLEAdvertiserThread()
     advertiser.start()
 
