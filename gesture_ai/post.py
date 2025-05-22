@@ -22,7 +22,7 @@ from pi_bt.ble_advertiser import BLEAdvertiserThread   # sends B1:...
 from pi_bt.ble_scanner    import BLEScannerThread      # reads  A1:...
 
 # ───────────────────────── tuning constants ──────────────────────────
-CAM_STREAM            = "172.20.10.14:81/stream"
+CAM_STREAM            = "http://172.20.10.14:81/stream"
 CENTER_PAN_US         = 1300          # pulse-width centres (µs)
 CENTER_TILT_US        = 1500
 
