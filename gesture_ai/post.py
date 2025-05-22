@@ -37,7 +37,7 @@ class Camera:
         self.cap.release()
 
 class PID:
-    def __init__(self, kp, ki, kd, deadband=3, max_change=50):
+    def __init__(self, kp, ki, kd, deadband=5, max_change=30):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -122,12 +122,13 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    pid_pan = PID(2.5, 0.1, 0.2, deadband=1, max_change=50)
+    pid_pan = PID(kp=1.2, ki=0.02, kd=0.1, deadband=10, max_change=30)
     sweeper = SweepSearch(pan_range=80, step=2)
 
     last_seen_time = time.time()
     LOST_TIMEOUT = 2.0
     track_mode = True
+    prev_pan_output = 0
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5, min_tracking_confidence=.5) as pose:
         try:
@@ -152,15 +153,19 @@ def main():
                     raw = classify(lm)
                     mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
 
-                    # Calculate bounding box
-                    bx1, by1, bx2, by2, _ = body_box(lm, w, h, 60)
+                    bx1, by1, bx2, by2, box_width = body_box(lm, w, h, 60)
                     cx, cy = (bx1 + bx2) // 2, (by1 + by2) // 2
                     err_x = w // 2 - cx
-                    err_y = h // 2 - cy  # Used only to maintain logic
+                    err_y = h // 2 - cy
                     cv2.rectangle(img, (bx1, by1), (bx2, by2), (0, 255, 255), 3)  # Yellow box
 
-                    pan_output = pid_pan.update(err_x)
+                    # NEW: Check if stable (big and centered)
+                    is_stable = (box_width > 0.6 * w) and (abs(err_x) < 10)
 
+                    if not is_stable:
+                        pan_output = pid_pan.update(err_x)
+                    else:
+                        pan_output = 0  # Hold still
                 else:
                     if time.time() - last_seen_time > LOST_TIMEOUT:
                         if track_mode:
@@ -171,6 +176,10 @@ def main():
                         continue
                     else:
                         pan_output = pid_pan.prev_output * 0.9
+
+                # Smooth output
+                pan_output = 0.7 * pan_output + 0.3 * prev_pan_output
+                prev_pan_output = pan_output
 
                 pan_dir = 1 if pan_output >= 0 else 0
                 pan_off = min(abs(int(pan_output)), 999)
