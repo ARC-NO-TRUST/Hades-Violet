@@ -9,7 +9,7 @@ sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
 
 # ─── configuration ──────────────────────────────────────────────────
-STREAM_URL       = "http://172.20.10.3:14/stream"
+STREAM_URL       = "http://172.20.10.14:81/stream"
 MIRRORED         = True
 ANGLE_GO,ANGLE_LR=35,25; OUT_GO,OUT_LR=0.70,0.50
 KP,KI,KD         = 2.5,0.1,0.2
