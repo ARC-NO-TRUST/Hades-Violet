@@ -83,6 +83,9 @@ def classify(lm):
 def main():
     cam = Camera(STREAM_URL)
     tx  = BLEAdvertiserThread(); tx.start()
+    cam = Camera("http://172.20.10.14:81/stream")
+    advertiser = BLEAdvertiserThread()
+    advertiser.start()
 
     pid_pan = PID(KP,KI,KD,DEAD,MAX_STEP)
     pid_tlt = PID(KP,KI,KD,DEAD,MAX_STEP)
