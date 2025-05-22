@@ -7,6 +7,7 @@ import mediapipe as mp
 
 sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
+from pi_bt.ble_scanner import BLEScannerThread
 
 # ─── Tunables ─────────────────────────────────────────────────────
 MIRRORED          = True
@@ -96,10 +97,36 @@ def body_box(lm,w,h,m=60):
     x2=min(w,int(max(xs)*w)+m); y2=min(h,int(max(ys)*h)+m)
     return x1,y1,x2,y2
 
+def extract_ultrasonic(payload):
+    """Extracts float distance from 'U1:<int>.<decimal>'."""
+    if payload.startswith("U1:"):
+        try:
+            return float(payload[3:].strip())
+        except ValueError:
+            pass
+    return None
+
+def extract_accel(payload):
+    """Extracts x, y, z from 'M1:x,y,z'."""
+    if payload.startswith("M1:"):
+        try:
+            parts = payload[3:].split(",")
+            if len(parts) != 3:
+                return None
+            x, y, z = map(int, parts)
+            return {"x": x, "y": y, "z": z}
+        except ValueError:
+            pass
+    return None
+
 # ─── Main loop ────────────────────────────────────────────────────
 def main():
     cam = Camera("http://172.20.10.14:81/stream")
-    ble = BLEAdvertiserThread(); ble.start()
+    advertiser = BLEAdvertiserThread()
+    advertiser.start()
+    scanner = BLEScannerThread()
+    scanner.start()
+    scanner_queue = scanner.get_queue()
 
     pid_pan  = PID(2.5,.1,.2, deadband=3, max_change=50)
     pid_tilt = PID(2.5,.1,.2, deadband=3, max_change=50)
@@ -112,6 +139,8 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN,
                           cv2.WINDOW_FULLSCREEN)
+
+    accel_pos = {"x": 0, "y": 0, "z":0}
 
     with mp_p.Pose(model_complexity=0,
                    min_detection_confidence=.5,
@@ -141,16 +170,16 @@ def main():
                     pan  = pid_pan.update(err_x)
                     tilt = max(min(pid_tilt.update(err_y),50),-50)
 
-                    ble.update_pan( (1 if pan>=0 else 0)*1000 + min(abs(int(pan)),999) )
-                    ble.update_tilt((1 if tilt>=0 else 0)*1000 + min(abs(int(tilt)),999))
+                    advertiser.update_pan( (1 if pan>=0 else 0)*1000 + min(abs(int(pan)),999) )
+                    advertiser.update_tilt((1 if tilt>=0 else 0)*1000 + min(abs(int(tilt)),999))
 
                 else:                                       # ▸ body missing
                     if not lost_active and time.time()-last_seen > LOST_TIMEOUT:
                         # enter lost mode once
                         lost_active=True
                         pid_pan.reset(); pid_tilt.reset()
-                        ble.update_pan(SPECIAL_CMD)
-                        ble.update_tilt(SPECIAL_CMD)
+                        advertiser.update_pan(SPECIAL_CMD)
+                        advertiser.update_tilt(SPECIAL_CMD)
 
                     # while lost_active we merely show video; no BLE traffic
 
@@ -169,8 +198,32 @@ def main():
                 cv2.imshow("Pose + HeadBox", cv2.resize(img,(1280,720)))
                 if cv2.waitKey(1) & 0xFF in (27,ord('q')):
                     break
+
+                # BLE Advertising Packet extraction
+                try:
+                    msg = scanner_queue.get_nowait()
+                    name = msg["name"]
+                    value = msg["value"]
+
+                    if name == "MOBILE" and value.startswith("M1:"):
+                        new_pos = extract_accel(value)
+                        if new_pos:
+                            accel_pos.update(new_pos)
+                            print(f"[SCAN][MOBILE] ACCEL POS - X: {accel_pos['x']}, Y: {accel_pos['y']}, Z: {accel_pos['z']}\n")
+                        else:
+                            print("[SCAN][MOBILE] Invalid accelerometer payload:", value)
+
+                    elif name == "ULTRASONIC" and value.startswith("U1:"):
+                        distance = extract_ultrasonic(value)
+                        print(f"[SCAN][ULTRASONIC] DISTANCE: {distance} m \n")
+
+                    else:
+                        print(f"[SCAN][UNKNOWN] ({name}): {value}\n")
+
+                except Empty:
+                    pass
         finally:
-            ble.stop(); ble.join()
+            advertiser.stop(); advertiser.join()
             cam.release(); cv2.destroyAllWindows()
 
 if __name__=="__main__":
