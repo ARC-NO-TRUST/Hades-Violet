@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# pose_track_sweep_pi.py  –  Pi drives the search sweep (no 2000,2000)
+# pose_track_sweep_pi.py  – Pi drives the pan sweep, tilt limited ±45 °
 
 import cv2, math, time, threading, sys
 from collections import deque
@@ -11,12 +11,13 @@ from pi_bt.ble_advertiser import BLEAdvertiserThread
 # ─── configuration ──────────────────────────────────────────────────
 STREAM_URL       = "http://172.20.10.14:81/stream"
 MIRRORED         = True
-ANGLE_GO,ANGLE_LR=35,25; OUT_GO,OUT_LR=0.70,0.50
+ANGLE_GO,ANGLE_LR=35,25;  OUT_GO,OUT_LR = 0.70,0.50
 KP,KI,KD         = 2.5,0.1,0.2
 DEAD,MAX_STEP    = 1,50
-LOST_TIMEOUT     = 2.0          # seconds before we declare “lost”
-SWEEP_ANGLES     = (-45, 45)    # degrees left / right
-SWEEP_DELAY      = 2.0          # seconds between jumps
+LOST_TIMEOUT     = 2.0            # seconds before we declare “lost”
+SWEEP_ANGLES     = (-45, 45)      # degrees left / right (pan sweep)
+SWEEP_DELAY      = 2.0            # seconds between jumps
+TILT_LIMIT       = 45             # **NEW**  max abs tilt (degrees)
 BUF_LEN,REQUIRED = 6,4
 FPS_ALPHA        = 0.2
 
@@ -25,16 +26,16 @@ mp_d, mp_p = mp.solutions.drawing_utils, mp.solutions.pose
 # ─── helper classes ────────────────────────────────────────────────
 class Camera:
     def __init__(self,url):
-        self.cap=cv2.VideoCapture(url)
+        self.cap = cv2.VideoCapture(url)
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open stream {url}")
         self.frame=None; self.lock=threading.Lock(); self.stop=False
         threading.Thread(target=self._loop,daemon=True).start()
     def _loop(self):
         while not self.stop:
-            ok,f=self.cap.read()
+            ok,f = self.cap.read()
             if ok:
-                with self.lock: self.frame=f
+                with self.lock: self.frame = f
     def read(self):
         with self.lock: return None if self.frame is None else self.frame.copy()
     def release(self): self.stop=True; self.cap.release()
@@ -83,9 +84,6 @@ def classify(lm):
 def main():
     cam = Camera(STREAM_URL)
     tx  = BLEAdvertiserThread(); tx.start()
-    cam = Camera("http://172.20.10.14:81/stream")
-    advertiser = BLEAdvertiserThread()
-    advertiser.start()
 
     pid_pan = PID(KP,KI,KD,DEAD,MAX_STEP)
     pid_tlt = PID(KP,KI,KD,DEAD,MAX_STEP)
@@ -129,12 +127,14 @@ def main():
 
                 # ---------- choose control output -------------------------
                 if found:
-                    pan_cmd = pid_pan.update(w//2 - cx)
-                    tilt_cmd= pid_tlt.update(h//2 - cy)
+                    pan_cmd  = pid_pan.update(w//2 - cx)
+                    tilt_cmd = pid_tlt.update(h//2 - cy)
+                    # clamp tilt within ±TILT_LIMIT degrees
+                    tilt_cmd = max(-TILT_LIMIT, min(tilt_cmd, TILT_LIMIT))
                 else:
                     # lost: perform Pi-side sweep pan only
                     if time.time()-last_sweep > SWEEP_DELAY:
-                        sweep_index ^= 1                      # toggle 0↔1
+                        sweep_index ^= 1
                         last_sweep = time.time()
                     pan_cmd  = SWEEP_ANGLES[sweep_index]
                     tilt_cmd = 0
