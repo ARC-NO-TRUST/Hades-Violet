@@ -152,9 +152,13 @@ def main():
                     raw = classify(lm)
                     mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
 
+                    # Calculate bounding box
                     bx1, by1, bx2, by2, _ = body_box(lm, w, h, 60)
                     cx, cy = (bx1 + bx2) // 2, (by1 + by2) // 2
                     err_x = w // 2 - cx
+                    err_y = h // 2 - cy  # Used only to maintain logic
+                    cv2.rectangle(img, (bx1, by1), (bx2, by2), (0, 255, 255), 3)  # Yellow box
+
                     pan_output = pid_pan.update(err_x)
 
                 else:
@@ -163,7 +167,7 @@ def main():
                             print("[INFO] Lost body, sending sweep command to base.")
                         track_mode = False
                         advertiser.update_pan(2000)
-                        advertiser.update_tilt(1000)  # Fixed to -45°
+                        advertiser.update_tilt(0)  # -45°
                         continue
                     else:
                         pan_output = pid_pan.prev_output * 0.9
@@ -172,8 +176,8 @@ def main():
                 pan_off = min(abs(int(pan_output)), 999)
                 pan_payload = pan_dir * 1000 + pan_off
 
-                # Fixed tilt to +45° when tracking, -45° when sweeping
-                tilt_payload = 1000 if track_mode else 0  # 1 for +45°, 0 for -45°
+                # Fixed tilt: 1000 for +45°, 0 for -45°
+                tilt_payload = 1000 if track_mode else 0
 
                 advertiser.update_pan(pan_payload)
                 advertiser.update_tilt(tilt_payload)
