@@ -37,7 +37,7 @@ class Camera:
         self.cap.release()
 
 class PID:
-    def __init__(self, kp, ki, kd, deadband=5, max_change=30):
+    def __init__(self, kp, ki, kd, deadband=3, max_change=30):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -122,13 +122,14 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    pid_pan = PID(kp=1.2, ki=0.02, kd=0.1, deadband=10, max_change=30)
-    sweeper = SweepSearch(pan_range=80, step=2)
+    pid_pan = PID(kp=1.2, ki=0.02, kd=0.1, deadband=3, max_change=30)
 
-    last_seen_time = time.time()
-    LOST_TIMEOUT = 2.0
-    track_mode = True
+    last_seen_time = 0
     prev_pan_output = 0
+    state = "SWEEPING"
+    sweep_angle = -45
+    sweep_direction = 1
+    last_sweep_time = time.time()
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5, min_tracking_confidence=.5) as pose:
         try:
@@ -143,12 +144,10 @@ def main():
                 img = frame.copy()
                 raw = "NONE"
 
+                person_found = False
                 if res.pose_landmarks:
+                    person_found = True
                     last_seen_time = time.time()
-                    if not track_mode:
-                        print("[INFO] Body re-acquired, switching back to tracking mode.")
-                    track_mode = True
-
                     lm = res.pose_landmarks.landmark
                     raw = classify(lm)
                     mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
@@ -159,37 +158,54 @@ def main():
                     err_y = h // 2 - cy
                     cv2.rectangle(img, (bx1, by1), (bx2, by2), (0, 255, 255), 3)  # Yellow box
 
-                    # NEW: Check if stable (big and centered)
                     is_stable = (box_width > 0.6 * w) and (abs(err_x) < 10)
 
-                    if not is_stable:
-                        pan_output = pid_pan.update(err_x)
-                    else:
-                        pan_output = 0  # Hold still
+                    if state == "TRACKING":
+                        if not is_stable:
+                            pan_output = pid_pan.update(err_x)
+                        else:
+                            pan_output = 0
+                        pan_output = 0.7 * pan_output + 0.3 * prev_pan_output
+                        prev_pan_output = pan_output
+
+                        pan_dir = 1 if pan_output >= 0 else 0
+                        pan_off = min(abs(int(pan_output)), 999)
+                        pan_payload = pan_dir * 1000 + pan_off
+                        advertiser.update_pan(pan_payload)
+
+                    # Change to TRACKING if in sweep
+                    if state == "SWEEPING":
+                        print("[STATE] Switching to TRACKING")
+                        state = "TRACKING"
+
                 else:
-                    if time.time() - last_seen_time > LOST_TIMEOUT:
-                        if track_mode:
-                            print("[INFO] Lost body, sending sweep command to base.")
-                        track_mode = False
-                        advertiser.update_pan(2000)
-                        advertiser.update_tilt(0)  # -45°
-                        continue
-                    else:
-                        pan_output = pid_pan.prev_output * 0.9
+                    if state == "TRACKING" and time.time() - last_seen_time > 2.0:
+                        print("[STATE] Lost target, switching to SWEEPING")
+                        state = "SWEEPING"
+                        sweep_angle = -45
+                        sweep_direction = 1
+                        last_sweep_time = time.time()
 
-                # Smooth output
-                pan_output = 0.7 * pan_output + 0.3 * prev_pan_output
-                prev_pan_output = pan_output
+                # Handle sweeping logic
+                if state == "SWEEPING":
+                    if time.time() - last_sweep_time >= 3.0:
+                        sweep_angle += sweep_direction * 30
+                        if sweep_angle > 45:
+                            sweep_angle = 45
+                            sweep_direction = -1
+                        elif sweep_angle < -45:
+                            sweep_angle = -45
+                            sweep_direction = 1
 
-                pan_dir = 1 if pan_output >= 0 else 0
-                pan_off = min(abs(int(pan_output)), 999)
-                pan_payload = pan_dir * 1000 + pan_off
+                        # Convert to pan payload
+                        pan_dir = 1 if sweep_angle >= 0 else 0
+                        pan_off = min(abs(int(sweep_angle)), 999)
+                        pan_payload = pan_dir * 1000 + pan_off
+                        advertiser.update_pan(pan_payload)
+                        last_sweep_time = time.time()
 
-                # Fixed tilt: 1000 for +45°, 0 for -45°
-                tilt_payload = 1000 if track_mode else 0
-
-                advertiser.update_pan(pan_payload)
-                advertiser.update_tilt(tilt_payload)
+                # Fixed tilt at +45°
+                advertiser.update_tilt(1000)
 
                 buf.append(raw)
                 top = max(set(buf), key=buf.count)
@@ -214,5 +230,3 @@ def main():
     cam.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    main()
