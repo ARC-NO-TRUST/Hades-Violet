@@ -11,6 +11,8 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/shell/shell.h>
+#include <math.h>
+#include <stdlib.h>
 
 // Threads and stacks
 static struct k_thread bt_thread;
@@ -100,6 +102,19 @@ void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 
 			// snprintf(transmit_buffer, sizeof(transmit_buffer), 
 			// 	"B1:%01d,%02d.%02d", gesture, distance_int, distance_frac);
+
+                        if (abs(msg.x) > 750) {
+                          printk("STOP!!!\n");
+                        }
+                        if (msg.y > 750) {
+                          printk("LEFT!!!\n");
+                        }
+                        if (msg.y < -750) {
+                          printk("RIGHT!!!\n");
+                        }
+                        if (abs(msg.z) > 750) {
+                          printk("GO!!!\n");
+                        }
 		
 			ad[2].data = transmit_buffer;
 			ad[2].data_len = 20;

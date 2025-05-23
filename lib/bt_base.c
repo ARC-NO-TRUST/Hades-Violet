@@ -66,7 +66,7 @@ void bt_base_print_address(void)
     bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
     size_t count = CONFIG_BT_ID_MAX;
 
-    bt_id_get(addrs, &count);  // ✅ no return value
+    bt_id_get(addrs, &count);
 
     if (count == 0) {
         printk("[CENTRAL][ERROR] No local Bluetooth address found\n");
