@@ -116,11 +116,11 @@ def classify(lm, accel_pos=None):
     # Final gesture classification
     if cam_gesture == "STOP" and accel_gesture == "STOP":
         final_gesture = "STOP"
-    if cam_gesture == "GO" and cam_gesture == "GO":
+    if cam_gesture == "GO" and accel_gesture == "GO":
         final_gesture = "GO"
-    if cam_gesture == "LEFT" and cam_gesture == "LEFT":
+    if cam_gesture == "LEFT" and accel_gesture == "LEFT":
         final_gesture = "LEFT"
-    if cam_gesture == "RIGHT" and cam_gesture == "RIGHT":
+    if cam_gesture == "RIGHT" and accel_gesture == "RIGHT":
         final_gesture = "RIGHT"
 
     return final_gesture
