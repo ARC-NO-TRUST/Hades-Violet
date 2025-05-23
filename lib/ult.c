@@ -23,7 +23,7 @@ K_THREAD_STACK_DEFINE(ultra_stack, ULTRA_STACK_SIZE);
 K_THREAD_STACK_DEFINE(bt_stack, BT_STACK_SIZE);
 
 // Shared message queue
-K_MSGQ_DEFINE(json_msgq, MSGQ_STRLEN, MSGQ_SIZE, 4); // 4-byte alignment
+K_MSGQ_DEFINE(ult_msgq, MSGQ_STRLEN, MSGQ_SIZE, 4); // 4-byte alignment
 
 // Ultrasonic thread
 static void ultrasonic_thread(void *arg1, void *arg2, void *arg3)
@@ -46,7 +46,7 @@ static void ultrasonic_thread(void *arg1, void *arg2, void *arg3)
 
     if (sensor_channel_get(dev, SENSOR_CHAN_DISTANCE, &distance) < 0) {
       LOG_ERR("Failed to get distance");
-      k_sleep(K_MSEC(1500));
+      k_sleep(K_MSEC(500));
       continue;
     }
 
@@ -55,7 +55,7 @@ static void ultrasonic_thread(void *arg1, void *arg2, void *arg3)
     // Ignore values too great - invalid
     if (dist_m > 10.0f) {
       LOG_WRN("Ignoring distance too large (%d.%02dm)", distance.val1, distance.val2);
-      k_sleep(K_MSEC(1500));
+      k_sleep(K_MSEC(500));
       continue;
     }
 
@@ -63,11 +63,11 @@ static void ultrasonic_thread(void *arg1, void *arg2, void *arg3)
     char dist_buf[MSGQ_STRLEN];
     snprintf(dist_buf, sizeof(dist_buf), "U1:%d.%02d", distance.val1, fractional);
 
-    if (k_msgq_put(&json_msgq, dist_buf, K_NO_WAIT) != 0) {
+    if (k_msgq_put(&ult_msgq, dist_buf, K_NO_WAIT) != 0) {
       LOG_WRN("Message queue full, dropping message");
     }
 
-    k_sleep(K_MSEC(1500));
+    k_sleep(K_MSEC(500));
   }
 }
 
@@ -84,7 +84,7 @@ static void bluetooth_thread(void *arg1, void *arg2, void *arg3)
   char recv_buf[MSGQ_STRLEN];
 
   while (1) {
-    k_msgq_get(&json_msgq, &recv_buf, K_FOREVER);
+    k_msgq_get(&ult_msgq, &recv_buf, K_FOREVER);
 
     const size_t len = strlen(recv_buf);
 
@@ -107,7 +107,7 @@ static void bluetooth_thread(void *arg1, void *arg2, void *arg3)
       LOG_INF("Advertising distance: %sm", recv_buf);
     }
 
-    k_sleep(K_MSEC(1500));
+    k_sleep(K_MSEC(200));
   }
 }
 
