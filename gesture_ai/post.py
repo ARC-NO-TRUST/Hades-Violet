@@ -152,7 +152,7 @@ def extract_accel(payload):
     return None
 
 def main():
-    cam = Camera("http://172.20.10.3:81/stream")
+    cam = Camera("http://172.20.10.14:81/stream")
     advertiser = BLEAdvertiserThread()
     advertiser.start()
     scanner = BLEScannerThread()
