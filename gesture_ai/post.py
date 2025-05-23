@@ -16,7 +16,7 @@ ANGLE_GO,ANGLE_LR = 35, 25
 OUT_GO, OUT_LR    = 0.70, 0.50
 BUF_LEN, REQUIRED = 6, 4
 FPS_ALPHA         = 0.2
-LOST_TIMEOUT      = 2.0            # s before we declare “lost”
+LOST_TIMEOUT      = 5.0            # s before we declare “lost”
 
 SPECIAL_CMD       = 2000           # Pi→MCU:  centre & hold
 
@@ -56,6 +56,7 @@ class PID:
         self.prev_err = self.integral = self.prev_out = 0
     def update(self, err):
         if abs(err) < self.deadband:
+            self.integral = 0
             return 0
         self.integral += err
         d       = err - self.prev_err
