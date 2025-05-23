@@ -11,7 +11,7 @@ class BLEAdvertiserThread(threading.Thread):
         self._stop_event = threading.Event()
         self._payload_queue = queue.Queue()
         self._current_payload = "B1:0,9.00,000,000"
-        self.count = 0
+        self.gesture = 0
         self.int_part = 9
         self.frac_part = 0
         self.pan = 0  # pan
@@ -44,13 +44,13 @@ class BLEAdvertiserThread(threading.Thread):
         subprocess.run(["sudo", "hciconfig", "hci0", "noleadv"])
 
     def _build_payload(self):
-        return f"B1:{self.count},{self.int_part}.{self.frac_part:02d},{self.pan:04d},{self.tilt:04d}"
+        return f"B1:{self.gesture},{self.int_part}.{self.frac_part:02d},{self.pan:04d},{self.tilt:04d}"
 
     def update_payload(self, new_payload):
         self._payload_queue.put(new_payload)
     
-    def update_count(self, count):
-        self.count = count
+    def update_gesture(self, gesture):
+        self.gesture = gesture
         self.update_payload(self._build_payload())
 
     def update_integer(self, integer):
@@ -72,6 +72,7 @@ class BLEAdvertiserThread(threading.Thread):
     def run(self):
         self.enable_advertising()
         print("[BLE] Advertising started.")
+        last_advertised = None  # store the last advertised payload
 
         while not self._stop_event.is_set():
             try:
@@ -80,11 +81,13 @@ class BLEAdvertiserThread(threading.Thread):
             except queue.Empty:
                 pass  # reuse last payload
 
-            if len(self._current_payload) > 26:
-                print(f"[BLE] WARN: Payload too long ({len(self._current_payload)}): {self._current_payload}")
-            else:
-                print(f"[BLE] Advertising: {self._current_payload}")
-                self.advertise_data(self._current_payload)
+            if self._current_payload != last_advertised:
+                if len(self._current_payload.encode("utf-8")) > 26:
+                    print(f"[BLE] WARN: Payload too long ({len(self._current_payload)}): {self._current_payload}")
+                else:
+                    print(f"[BLE] Advertising: {self._current_payload}")
+                    self.advertise_data(self._current_payload)
+                    last_advertised = self._current_payload  # update the last payload
 
         self.disable_advertising()
         print("[BLE] Advertising stopped.")
@@ -98,17 +101,17 @@ if __name__ == "__main__":
     advertiser.start()
 
     try:
-        count = 0
+        gesture = 0
         while True:
-            int_part = count % 10
-            frac_part = (count * 7) % 100
-            val1 = (count * 3) % 1000
-            val2 = (count * 5) % 1000
+            int_part = gesture % 10
+            frac_part = (gesture * 7) % 100
+            val1 = (gesture * 3) % 1000
+            val2 = (gesture * 5) % 1000
 
-            payload = f"B1:{count},{int_part}.{frac_part:02d},{val1:04d},{val2:04d}"
+            payload = f"B1:{gesture},{int_part}.{frac_part:02d},{val1:04d},{val2:04d}"
             advertiser.update_payload(payload)
             time.sleep(1)
-            count += 1
+            gesture += 1
     except KeyboardInterrupt:
         print("\n[MAIN] Stopping advertiser...")
         advertiser.stop()

@@ -229,6 +229,13 @@ def main():
 
                     elif name == "ULTRASONIC" and value.startswith("U1:"):
                         distance = extract_ultrasonic(value)
+
+                        if distance is not None:
+                            int_part = int(distance)
+                            frac_part = int(round((distance - int_part) * 100))
+                            advertiser.update_integer(int_part)
+                            advertiser.update_frac(frac_part)
+                        
                         print(f"[SCAN][ULTRASONIC] DISTANCE: {distance} m \n")
 
                     else:
@@ -236,6 +243,10 @@ def main():
 
                 except Empty:
                     pass
+
+
+
+            
         finally:
             advertiser.stop(); advertiser.join()
             cam.release(); cv2.destroyAllWindows()
