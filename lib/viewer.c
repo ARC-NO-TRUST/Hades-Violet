@@ -10,9 +10,7 @@
 LOG_MODULE_REGISTER(viewer, LOG_LEVEL_INF);
 
 /* ───────── BLE advert queue ───────── */
-#define RAW_LEN 16
-struct adv_data { char buf[RAW_LEN]; int8_t rssi; };
-K_MSGQ_DEFINE(adv_msgq, sizeof(struct adv_data), 10, 4);
+#define RAW_LEN 32
 
 /* ───────── UI handles ───────── */
 #define SEG_CNT 8
@@ -32,29 +30,21 @@ static const struct bt_le_scan_param scan_param = {
 };
 
 /* ───────── BLE advert helpers ───────── */
-static bool ad_find_mfg(struct bt_data *d, void *ud)
+static bool ad_extract_rpi_msg(struct bt_data *data, void *user_data)
 {
-    char *m = ud;
-    if (d->type == BT_DATA_MANUFACTURER_DATA) {
-        size_t len = MIN(d->data_len, RAW_LEN - 1);
-        memcpy(m, d->data, len);
-        m[len] = '\0';
+    char *mfg_buf = user_data;
+    if (data->type == BT_DATA_MANUFACTURER_DATA) {
+        size_t len = MIN(data->data_len, 30);
+        // Skip the 2-byte manufacturer ID (e.g., 0xFFFF)
+        if (data->data_len > 2) {
+            memcpy(mfg_buf, data->data + 2, len - 2);
+            mfg_buf[len - 2] = '\0';
+        } else {
+            mfg_buf[0] = '\0';  // Invalid manufacturer payload
+        }
         return false;
     }
     return true;
-}
-
-static void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
-                    uint8_t type, struct net_buf_simple *ad)
-{
-    char raw[RAW_LEN] = {0};
-    bt_data_parse(ad, ad_find_mfg, raw);
-    if (raw[0]) {
-        struct adv_data it;
-        memcpy(it.buf, raw, RAW_LEN);
-        it.rssi = rssi;
-        k_msgq_put(&adv_msgq, &it, K_NO_WAIT);
-    }
 }
 
 /* ───────── UI helpers ───────── */
@@ -144,34 +134,33 @@ static void light_segments(lv_obj_t **arr, int count)
     }
 }
 
-/* ───────── BLE → UI update ───────── */
-static void update_display_from_ble(const char *buf)
+struct ble_display_data {
+    int cmd;
+    int int_part;
+    int frac_part;
+};
+K_MSGQ_DEFINE(ble_ui_msgq, sizeof(struct ble_display_data), 10, 4);
+
+
+static void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
+                    uint8_t type, struct net_buf_simple *ad)
 {
-    int cmd = -1;
-    int int_part = 0;
-    int frac_part = 0;
+    char mfg_buf[RAW_LEN] = {0};
+    bt_data_parse(ad, ad_extract_rpi_msg, mfg_buf);
 
-    if (sscanf(buf + 3, "%d,%d.%d", &cmd, &int_part, &frac_part) == 3) {
-        const char *text = NULL;
-        switch (cmd) {
-            case 0: text = "GO";    break;
-            case 1: text = "STOP";  break;
-            case 2: text = "LEFT";  break;
-            case 3: text = "RIGHT"; break;
-            default:
-                LOG_INF("Unknown gesture code: %d", cmd);
-                return;
+    if (strncmp(mfg_buf, "B1:", 3) == 0) {
+        printk("HIIIII1\n");
+
+        struct ble_display_data d;
+        char cam_pan_buf[5] = {0};
+        char cam_tilt_buf[5] = {0};
+
+        if (sscanf(mfg_buf + 3, "%d,%d.%d,%4s,%4s",
+                   &d.cmd, &d.int_part, &d.frac_part,
+                   cam_pan_buf, cam_tilt_buf) == 5) {
+            printk("BLE parsed: cmd=%d, dist=%d.%02d\n", d.cmd, d.int_part, d.frac_part);
+            k_msgq_put(&ble_ui_msgq, &d, K_NO_WAIT);
         }
-
-        char display_buf[64];
-        snprintf(display_buf, sizeof(display_buf), "%s\n%d.%02dm", text, int_part, frac_part);
-        lv_label_set_text(centre_lbl, display_buf);
-        lv_obj_align(centre_lbl, LV_ALIGN_CENTER, 0, 0);
-
-        light_segments(left_seg,  (cmd == 1) ? 8 : (cmd == 2) ? 6 : (cmd == 3) ? 2 : 2);
-        light_segments(right_seg, (cmd == 1) ? 8 : (cmd == 2) ? 2 : (cmd == 3) ? 6 : 2);
-
-        printk("Displayed command: %s\n", text);
     }
 }
 
@@ -207,12 +196,28 @@ static void ui_thread(void *a, void *b, void *c)
     setup_display_and_ble();
 
     while (1) {
-        struct adv_data item;
-        if (k_msgq_get(&adv_msgq, &item, K_NO_WAIT) == 0) {
-            if (strncmp(item.buf, "B1:", 3) == 0) {
-                update_display_from_ble(item.buf);
+        struct ble_display_data d;
+        if (k_msgq_get(&ble_ui_msgq, &d, K_NO_WAIT) == 0) {
+            const char *text = NULL;
+            switch (d.cmd) {
+                case 0: text = "GO";    break;
+                case 1: text = "STOP";  break;
+                case 2: text = "LEFT";  break;
+                case 3: text = "RIGHT"; break;
+                default: text = "NONE";  break;
             }
+
+            char display_buf[64];
+            snprintf(display_buf, sizeof(display_buf), "%s\n%d.%02dm", text, d.int_part, d.frac_part);
+            lv_label_set_text(centre_lbl, display_buf);
+            lv_obj_align(centre_lbl, LV_ALIGN_CENTER, 0, 0);
+
+            light_segments(left_seg,  (d.cmd == 1) ? 8 : (d.cmd == 2) ? 6 : (d.cmd == 3) ? 2 : 2);
+            light_segments(right_seg, (d.cmd == 1) ? 8 : (d.cmd == 2) ? 2 : (d.cmd == 3) ? 6 : 2);
+
+            printk("Displayed command: %s\n", text);
         }
+
         lv_timer_handler();
         k_sleep(K_MSEC(30));
     }
