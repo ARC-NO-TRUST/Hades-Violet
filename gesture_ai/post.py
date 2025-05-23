@@ -84,27 +84,46 @@ def classify(lm, accel_pos=None):
     r_h_go,  l_h_go  = horiz_angle(rw, rs) < ANGLE_GO, horiz_angle(lw, ls) < ANGLE_GO
     r_h_lr,  l_h_lr  = horiz_angle(rw, rs) < ANGLE_LR, horiz_angle(lw, ls) < ANGLE_LR
 
+    cam_gesture = "NONE"
+    accel_gesture = "NONE"
+    final_gesture = "NONE"
+
+    # Camera gesture classification
     if rw.y < rs.y - .10 and abs(rdx) < .12 and lw.y > ls.y - .05:
-        return "STOP"
+        cam_gesture = "STOP"
     if r_h_go and l_h_go and r_out_go and l_out_go:
-        return "GO"
-    left  = l_h_lr and l_out_lr and not (r_h_lr and r_out_lr)
+        cam_gesture = "GO"
+    left = l_h_lr and l_out_lr and not (r_h_lr and r_out_lr)
     right = r_h_lr and r_out_lr and not (l_h_lr and l_out_lr)
-    if MIRRORED: left, right = right, left
+    if MIRRORED:
+        left, right = right, left
+    if right:
+        cam_gesture = "RIGHT"
+    if left:
+        cam_gesture = "LEFT"
 
-    if not left and not right and accel_pos:
+    # Accelerometer gesture classification
+    if accel_pos:
         if abs(accel_pos['x']) > 750:
-            return "STOP"
+            accel_gesture = "STOP"
         if accel_pos['y'] > 750:
-            return "LEFT"
+            accel_gesture = "LEFT"
         if accel_pos['y'] < -750:
-            return "RIGHT"
+            accel_gesture = "RIGHT"
         if accel_pos['z'] > 750:
-            return "GO"
+            accel_gesture = "GO"
 
-    if left:  return "LEFT"
-    if right: return "RIGHT"
-    return "NONE"
+    # Final gesture classification
+    if cam_gesture == "STOP" and accel_gesture == "STOP":
+        final_gesture = "STOP"
+    if cam_gesture == "GO" and cam_gesture == "GO":
+        final_gesture = "GO"
+    if cam_gesture == "LEFT" and cam_gesture == "LEFT":
+        final_gesture = "LEFT"
+    if cam_gesture == "RIGHT" and cam_gesture == "RIGHT":
+        final_gesture = "RIGHT"
+
+    return final_gesture
 
 def body_box(lm,w,h,m=60):
     xs,ys=[p.x for p in lm],[p.y for p in lm]
