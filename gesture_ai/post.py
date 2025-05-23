@@ -46,7 +46,7 @@ class Camera:
 
 # ─── PID ──────────────────────────────────────────────────────────
 class PID:
-    def __init__(self, kp, ki, kd, deadband=3, max_change=30):
+    def __init__(self, kp, ki, kd, deadband=5, max_change=30):
         self.kp,self.ki,self.kd = kp,ki,kd
         self.prev_err = 0
         self.integral = 0
@@ -130,8 +130,8 @@ def main():
     scanner.start()
     scanner_queue = scanner.get_queue()
 
-    pid_pan  = PID(2.5,.1,.2, deadband=3, max_change=50)
-    pid_tilt = PID(2.5,.1,.2, deadband=3, max_change=50)
+    pid_pan  = PID(2.5,.1,.2, deadband=5, max_change=50)
+    pid_tilt = PID(2.5,.1,.2, deadband=5, max_change=50)
 
     buf, deb_pose = deque(maxlen=BUF_LEN), "NONE"
     last_seen = time.time()
