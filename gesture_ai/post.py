@@ -123,7 +123,7 @@ def classify(lm, accel_pos=None):
     if cam_gesture == "RIGHT" and accel_gesture == "RIGHT":
         final_gesture = "RIGHT"
 
-    return final_gesture
+    return cam_gesture
 
 def body_box(lm,w,h,m=60):
     xs,ys=[p.x for p in lm],[p.y for p in lm]
