@@ -17,7 +17,7 @@ class ScanDelegate(DefaultDelegate):
         super().__init__()
 
 class BLEScannerThread(threading.Thread):
-    def __init__(self, scan_interval=5.0, pause_interval=0.5):
+    def __init__(self, scan_interval=1.5, pause_interval=0.5):
         super().__init__()
         self._data_queue = queue.Queue()  # shared queue
         self.scanner = Scanner().withDelegate(ScanDelegate())
