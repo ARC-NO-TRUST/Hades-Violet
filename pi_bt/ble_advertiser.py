@@ -10,9 +10,9 @@ class BLEAdvertiserThread(threading.Thread):
         super().__init__()
         self._stop_event = threading.Event()
         self._payload_queue = queue.Queue()
-        self._current_payload = "B1:0,0.00,000,000"
+        self._current_payload = "B1:0,9.00,000,000"
         self.gesture = 0
-        self.int_part = 0
+        self.int_part = 9
         self.frac_part = 0
         self.pan = 0  # pan
         self.tilt = 0  # tilt
