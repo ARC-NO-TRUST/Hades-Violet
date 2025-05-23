@@ -76,40 +76,54 @@ def horiz_angle(w,s):
 
 def classify(lm, accel_pos=None):
     rs, ls = lm[mp_p.PoseLandmark.RIGHT_SHOULDER], lm[mp_p.PoseLandmark.LEFT_SHOULDER]
-    rw, lw = lm[mp_p.PoseLandmark.RIGHT_WRIST], lm[mp_p.PoseLandmark.LEFT_WRIST]
-    span = abs(rs.x - ls.x) or 1e-4
+    rw, lw = lm[mp_p.PoseLandmark.RIGHT_WRIST],    lm[mp_p.PoseLandmark.LEFT_WRIST]
+    span   = abs(rs.x - ls.x) or 1e-4
     rdx, ldx = rw.x - rs.x, lw.x - ls.x
-    r_out_go, l_out_go = abs(rdx) > OUT_GO * span, abs(ldx) > OUT_GO * span
-    r_out_lr, l_out_lr = abs(rdx) > OUT_LR * span, abs(ldx) > OUT_LR * span
-    r_h_go, l_h_go = horiz_angle(rw, rs) < ANGLE_GO, horiz_angle(lw, ls) < ANGLE_GO
-    r_h_lr, l_h_lr = horiz_angle(rw, rs) < ANGLE_LR, horiz_angle(lw, ls) < ANGLE_LR
+    r_out_go, l_out_go = abs(rdx) > OUT_GO*span, abs(ldx) > OUT_GO*span
+    r_out_lr, l_out_lr = abs(rdx) > OUT_LR*span, abs(ldx) > OUT_LR*span
+    r_h_go,  l_h_go  = horiz_angle(rw, rs) < ANGLE_GO, horiz_angle(lw, ls) < ANGLE_GO
+    r_h_lr,  l_h_lr  = horiz_angle(rw, rs) < ANGLE_LR, horiz_angle(lw, ls) < ANGLE_LR
 
-    votes = {"STOP": 0, "GO": 0, "LEFT": 0, "RIGHT": 0, "NONE": 0}
+    cam_gesture = "NONE"
+    accel_gesture = "NONE"
+    final_gesture = "NONE"
 
-    # Camera-based gesture classification
-    if rw.y < rs.y - 0.10 and abs(rdx) < 0.12 and lw.y > ls.y - 0.05:
-        votes["STOP"] += 1
-    elif r_h_go and l_h_go and r_out_go and l_out_go:
-        votes["GO"] += 1
-    else:
-        if l_h_lr and l_out_lr and not (r_h_lr and r_out_lr):
-            votes["LEFT" if not MIRRORED else "RIGHT"] += 1
-        if r_h_lr and r_out_lr and not (l_h_lr and l_out_lr):
-            votes["RIGHT" if not MIRRORED else "LEFT"] += 1
+    # Camera gesture classification
+    if rw.y < rs.y - .10 and abs(rdx) < .12 and lw.y > ls.y - .05:
+        cam_gesture = "STOP"
+    if r_h_go and l_h_go and r_out_go and l_out_go:
+        cam_gesture = "GO"
+    left = l_h_lr and l_out_lr and not (r_h_lr and r_out_lr)
+    right = r_h_lr and r_out_lr and not (l_h_lr and l_out_lr)
+    if MIRRORED:
+        left, right = right, left
+    if right:
+        cam_gesture = "RIGHT"
+    if left:
+        cam_gesture = "LEFT"
 
-    # Accelerometer-based gesture classification
+    # Accelerometer gesture classification
     if accel_pos:
         if abs(accel_pos['x']) > 750:
-            votes["STOP"] += 1
-        elif accel_pos['y'] > 750:
-            votes["LEFT"] += 1
-        elif accel_pos['y'] < -750:
-            votes["RIGHT"] += 1
-        elif accel_pos['z'] > 750:
-            votes["GO"] += 1
+            accel_gesture = "STOP"
+        if accel_pos['y'] > 750:
+            accel_gesture = "LEFT"
+        if accel_pos['y'] < -750:
+            accel_gesture = "RIGHT"
+        if accel_pos['z'] > 750:
+            accel_gesture = "GO"
 
-    # Return gesture with the most votes
-    return max(votes, key=votes.get)
+    # Final gesture classification
+    if cam_gesture == "STOP" and accel_gesture == "STOP":
+        final_gesture = "STOP"
+    if cam_gesture == "GO" and cam_gesture == "GO":
+        final_gesture = "GO"
+    if cam_gesture == "LEFT" and cam_gesture == "LEFT":
+        final_gesture = "LEFT"
+    if cam_gesture == "RIGHT" and cam_gesture == "RIGHT":
+        final_gesture = "RIGHT"
+
+    return final_gesture
 
 def body_box(lm,w,h,m=60):
     xs,ys=[p.x for p in lm],[p.y for p in lm]
