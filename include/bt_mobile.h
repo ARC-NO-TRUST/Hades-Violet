@@ -20,9 +20,9 @@
 
 // Message queue Struct define
 struct accel_msg {
-	int8_t x;
-    int8_t y;
-    int8_t z;
+	int x;
+    int y;
+    int z;
 };
 
 extern struct k_msgq accel_message_queue;

@@ -1,4 +1,5 @@
 #include "bt_mobile.h"
+#include "accelerometer.h"
 #include <string.h>
 #include <stddef.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -16,7 +17,7 @@ static struct k_thread bt_thread;
 K_THREAD_STACK_DEFINE(bt_stack, BT_STACK_SIZE);
 K_MSGQ_DEFINE(accel_message_queue, sizeof(struct accel_msg), 10, 1);
 
-char transmit_buffer[BLE_BUFFER_LEN] = "[BLE INIT MSG]";
+char transmit_buffer[BLE_BUFFER_LEN] = "[INIT MSG]";
 size_t buffer_len = sizeof(transmit_buffer);
 
 struct bt_data ad[] = {
@@ -55,9 +56,9 @@ void print_bt_address(void)
     bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
     size_t count = CONFIG_BT_ID_MAX;
 
-    int err = bt_id_get(addrs, &count);
-    if (err || count == 0) {
-        printk("[BT MAC] Failed to get local address (err %d)\n", err);
+    bt_id_get(addrs, &count);
+    if (count == 0) {
+        printk("[BT MAC] Failed to get local address\n");
         return;
     }
 
@@ -77,28 +78,28 @@ void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 
 	err = bt_enable(bt_ready);
 	if (err) {
-		printk("[BT ENABLE] Bluetooth init failed (err %d)\n", err);
+		printk("[BT ENABLE] Bluetooth init failed\n");
 	} else {
         printk("[BT ENABLE] Bluetooth init success\n");
     }
 
 	(void)bt_mobile_start_ad();
 
-	int gesture = 0;
-	int distance_cycle_index = 0;
-	const int max_index = 8;
+	// int gesture = 0;
+	// int distance_cycle_index = 0;
+	// const int max_index = 8;
 
 	while (1) {
 		struct accel_msg msg;
 		
 		if (k_msgq_get(&accel_message_queue, &msg, K_FOREVER) == 0) {
-			// snprintf(transmit_buffer, sizeof(transmit_buffer), 
-			// 	"M1:%03d,%03d,%03d", msg.x, msg.y, msg.z);
-			int distance_int = (distance_cycle_index / 2);
-			int distance_frac = (distance_cycle_index % 2 == 0) ? 20 : 70;
-
 			snprintf(transmit_buffer, sizeof(transmit_buffer), 
-				"B1:%01d,%02d.%02d", gesture, distance_int, distance_frac);
+				"M1:%03d,%03d,%03d", msg.x, msg.y, msg.z);
+			// int distance_int = (distance_cycle_index / 2);
+			// int distance_frac = (distance_cycle_index % 2 == 0) ? 20 : 70;
+
+			// snprintf(transmit_buffer, sizeof(transmit_buffer), 
+			// 	"B1:%01d,%02d.%02d", gesture, distance_int, distance_frac);
 		
 			ad[2].data = transmit_buffer;
 			ad[2].data_len = 20;
@@ -110,10 +111,10 @@ void mobile_bluetooth_thread_fn(void *p1, void *p2, void *p3)
 				printk("[BT MOBILE] Update Successful: %s \n", transmit_buffer);
 			}
 
-			gesture = (gesture + 1) % 4;
-			distance_cycle_index = (distance_cycle_index + 1) % (max_index + 1);
+			// gesture = (gesture + 1) % 4;
+			// distance_cycle_index = (distance_cycle_index + 1) % (max_index + 1);
 		}
-		k_sleep(K_MSEC(5000));
+		k_sleep(K_MSEC(200));
 	}
 }
 

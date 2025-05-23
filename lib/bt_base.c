@@ -80,12 +80,12 @@ void bt_base_print_address(void)
 
 
 static void bt_base_process_data(char *msg) {
-    int ret = k_msgq_put(&base_recv_message_queue, msg, K_NO_WAIT);
-    if (ret != 0) {
-        printk("[BASE][ERROR] Failed to enqueue message (err %d)\n", ret);
-    } else {
-        printk("[BASE][INFO] Message enqueued: %s\n", msg);
-    }
+    // int ret = k_msgq_put(&base_recv_message_queue, msg, K_NO_WAIT);
+    // if (ret != 0) {
+    //     printk("[BASE][ERROR] Failed to enqueue message (err %d)\n", ret);
+    // } else {
+    printk("[BASE][INFO] Accel Message Received: %s\n", msg);
+    // }
 }
 
 

@@ -5,7 +5,7 @@
 #include <zephyr/kernel.h>
 #include <math.h>
 
-// #define DEBUG
+#define DEBUG
 
 static const struct device *accel_dev  = DEVICE_DT_GET(DT_ALIAS(accel0));
 K_THREAD_STACK_DEFINE(accel_stack, STACK_SIZE);
@@ -28,7 +28,6 @@ static void accel_thread(void *a, void *b, void *c)
 			float xf = sensor_value_to_double(&x);
 			float yf = sensor_value_to_double(&y);
 			float zf = sensor_value_to_double(&z);
-			float mag = sqrtf(xf * xf + yf * yf + zf * zf);
 
 			#ifdef DEBUG
 				int x_int = (int)xf;
@@ -37,22 +36,20 @@ static void accel_thread(void *a, void *b, void *c)
 				int y_frac = (int)((fabsf(yf - y_int)) * 100.0f + 0.5f);
 				int z_int = (int)zf;
 				int z_frac = (int)((fabsf(zf - z_int)) * 100.0f + 0.5f);
-				int mag_int = (int)mag;
-				int mag_frac = (int)((fabsf(mag - mag_int)) * 100.0f + 0.5f);
-
 			
-				printk("[ACC] Accel X=%d.%02d Y=%d.%02d Z=%d.%02d Mag=%d.%02d\n",
+				printk("[ACC] Accel X=%d.%02d Y=%d.%02d Z=%d.%02d\n",
 					x_int, x_frac,
 					y_int, y_frac,
-					z_int, z_frac,
-					mag_int, mag_frac);
+					z_int, z_frac);
 			#endif
 
 			struct accel_msg msg = {
-				.x = xf * 100,
-				.y = yf * 100,
-				.z = zf * 100
+				.x = (int)roundf(xf * 100.0f),
+				.y = (int)roundf(yf * 100.0f),
+				.z = (int)roundf(zf * 100.0f),
 			};
+
+			printk("[ACC RAW] x=%d y=%d z=%d\n", msg.x, msg.y, msg.z);
 
 			k_msgq_put(&accel_message_queue, &msg, K_NO_WAIT);
     	}
