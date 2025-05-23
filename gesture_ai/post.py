@@ -4,6 +4,7 @@
 import cv2, math, time, threading, sys
 from collections import deque
 import mediapipe as mp
+from queue import Empty
 
 sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
@@ -121,7 +122,7 @@ def extract_accel(payload):
 
 # ─── Main loop ────────────────────────────────────────────────────
 def main():
-    cam = Camera("http://172.20.10.14:81/stream")
+    cam = Camera("http://172.20.10.3:81/stream")
     advertiser = BLEAdvertiserThread()
     advertiser.start()
     scanner = BLEScannerThread()
@@ -210,6 +211,18 @@ def main():
                         if new_pos:
                             accel_pos.update(new_pos)
                             print(f"[SCAN][MOBILE] ACCEL POS - X: {accel_pos['x']}, Y: {accel_pos['y']}, Z: {accel_pos['z']}\n")
+                            if abs(accel_pos['x']) > 750:
+                                print("STOP!!!")
+
+                            if accel_pos['y'] > 750:
+                                print("LEFT!!!")
+
+                            if accel_pos['y'] < -750:
+                                print("RIGHT!!!")
+
+                            if accel_pos['z'] > 750:
+                                print("GO!!!")
+
                         else:
                             print("[SCAN][MOBILE] Invalid accelerometer payload:", value)
 
