@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# pose_track_pi.py – recentres on lost target (non-blocking version)
 
-import cv2, math, time, threading, sys
+import cv2, math, time, threading, sys, json
 from collections import deque
 import mediapipe as mp
 from queue import Empty
+import paho.mqtt.client as mqtt
 
 sys.path.append("/home/ceylan/Documents/csse4011Project")
 from pi_bt.ble_advertiser import BLEAdvertiserThread
@@ -18,6 +18,14 @@ BUF_LEN, REQUIRED = 6, 4
 FPS_ALPHA         = 0.2
 LOST_TIMEOUT      = 5.0
 SPECIAL_CMD       = 2000
+
+# ─── MQTT Setup ───
+MQTT_BROKER = "localhost"
+MQTT_PORT = 1883
+MQTT_TOPIC = "arcnotrust/data"
+
+mqtt_client = mqtt.Client()
+mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
 # ─── MediaPipe helpers ───
 mp_d, mp_p = mp.solutions.drawing_utils, mp.solutions.pose
@@ -88,7 +96,6 @@ def classify(lm, accel_pos=None):
     accel_gesture = "NONE"
     final_gesture = "NONE"
 
-    # Camera gesture classification
     if rw.y < rs.y - .10 and abs(rdx) < .12 and lw.y > ls.y - .05:
         cam_gesture = "STOP"
     if r_h_go and l_h_go and r_out_go and l_out_go:
@@ -102,7 +109,6 @@ def classify(lm, accel_pos=None):
     if left:
         cam_gesture = "LEFT"
 
-    # Accelerometer gesture classification
     if accel_pos:
         if abs(accel_pos['x']) > 750:
             accel_gesture = "STOP"
@@ -113,7 +119,6 @@ def classify(lm, accel_pos=None):
         if accel_pos['z'] > 750:
             accel_gesture = "GO"
 
-    # Final gesture classification
     if cam_gesture == "STOP" and accel_gesture == "STOP":
         final_gesture = "STOP"
     if cam_gesture == "GO" and accel_gesture == "GO":
@@ -152,6 +157,8 @@ def extract_accel(payload):
     return None
 
 def main():
+    last_distance = None
+    last_gesture = None
     cam = Camera("http://192.168.0.111:81/stream")
     advertiser = BLEAdvertiserThread()
     advertiser.start()
@@ -171,6 +178,7 @@ def main():
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     accel_pos = {"x": 0, "y": 0, "z":0}
+    gesture = -1
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5, min_tracking_confidence=.5) as pose:
         try:
@@ -213,6 +221,23 @@ def main():
                 if buf.count(top)>=REQUIRED: deb_pose=top
                 cv2.putText(img,deb_pose,(10,20), cv2.FONT_HERSHEY_SIMPLEX,.6,(0,0,255),2)
 
+                if deb_pose == "GO":
+                    gesture = 0
+                elif deb_pose == "STOP":
+                    gesture = 1
+                elif deb_pose == "LEFT":
+                    gesture = 2
+                elif deb_pose == "RIGHT":
+                    gesture = 3
+
+                if gesture != last_gesture or last_distance is not None:
+                    payload = {
+                        "gesture": gesture,
+                        "distance": last_distance
+                    }
+                    mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
+                    last_gesture = gesture
+
                 now=time.time(); fps=1/(now-prev_ts); prev_ts=now
                 fps_ema = fps if fps_ema==0 else FPS_ALPHA*fps+(1-FPS_ALPHA)*fps_ema
                 cv2.putText(img,f"{fps_ema:4.1f} FPS",(10,h-10), cv2.FONT_HERSHEY_SIMPLEX,.5,(0,255,0),2)
@@ -241,6 +266,7 @@ def main():
                             frac_part = int(round((distance - int_part) * 100))
                             advertiser.update_integer(int_part)
                             advertiser.update_frac(frac_part)
+                            last_distance = round(distance, 2)
                         print(f"[SCAN][ULTRASONIC] DISTANCE: {distance} m \n")
 
                     else:
@@ -250,6 +276,7 @@ def main():
                     pass
 
         finally:
+            mqtt_client.disconnect()
             advertiser.stop(); advertiser.join()
             cam.release(); cv2.destroyAllWindows()
 

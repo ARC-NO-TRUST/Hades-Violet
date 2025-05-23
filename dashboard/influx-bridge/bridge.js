@@ -1,6 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const mqtt = require('mqtt');
 
 const app = express();
 const port = 4000;
@@ -10,6 +11,10 @@ const INFLUX_URL = 'http://localhost:8086/api/v2/write';
 const ORG = 'csse4011org';
 const BUCKET = 'csse4011bucket';
 const TOKEN = 'MWskLjvhS6Qh6Oa7cfnP-atlV6VfE6jys_w2GnVzuovA3f7ejA-ZO2RNtLI6GN4lLkzkG8A-lv4adE11i57nNA==';
+
+// MQTT setup
+const MQTT_TOPIC = 'arcnotrust/data';
+const mqttClient = mqtt.connect('mqtt://localhost');
 
 // Middleware to parse JSON
 app.use(bodyParser.json());
@@ -49,25 +54,54 @@ app.post('/data', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Bridge running at http://localhost:${port}/data`);
+// MQTT handling
+mqttClient.on('connect', () => {
+    console.log('Connected to MQTT broker');
+    mqttClient.subscribe(MQTT_TOPIC, (err) => {
+        if (err) {
+            console.error('MQTT subscription error:', err.message);
+        } else {
+            console.log(`Subscribed to topic: ${MQTT_TOPIC}`);
+        }
+    });
 });
 
-// === DUMMY DATA SENDER ===
-setInterval(async () => {
-    const gestureCode = Math.floor(Math.random() * 4); // 0, 1, 2, 3
-    const dummyData = {
-        gesture: gestureCode,
-        proximity: (Math.random() * 3).toFixed(2)
-    };
-
+mqttClient.on('message', async (topic, message) => {
     try {
-        await axios.post(`http://localhost:${port}/data`, dummyData);
-        console.log(`Dummy data sent: ${JSON.stringify({
-            gesture: gestureCode,
-            proximity: dummyData.proximity
-        })}`);
+        const data = JSON.parse(message.toString());
+        const { gesture, distance } = data;
+
+        if (gesture === undefined || distance === undefined) {
+            console.warn('MQTT message missing fields:', message.toString());
+            return;
+        }
+
+        const lines = [
+            `gesture_detection value=${gesture}`,
+            `proximity_alert value=${distance}`
+        ];
+
+        const response = await axios.post(
+            `${INFLUX_URL}?org=${ORG}&bucket=${BUCKET}&precision=ns`,
+            lines.join('\n'),
+            {
+                headers: {
+                    'Authorization': `Token ${TOKEN}`,
+                    'Content-Type': 'text/plain',
+                }
+            }
+        );
+
+        if (response.status === 204) {
+            console.log(`✔ MQTT data written: gesture=${gesture}, distance=${distance}`);
+        } else {
+            console.error('❌ InfluxDB unexpected response');
+        }
     } catch (err) {
-        console.error('Failed to send dummy data:', err.message);
+        console.error('❌ Failed to process MQTT message:', err.message);
     }
-}, 5000);
+});
+
+app.listen(port, () => {
+    console.log(`REST fallback running at http://localhost:${port}/data`);
+});
