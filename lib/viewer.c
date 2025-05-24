@@ -6,48 +6,79 @@
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/sys/printk.h>
 #include <string.h>
+#include <stdlib.h>
 
 LOG_MODULE_REGISTER(viewer, LOG_LEVEL_INF);
 
-/* ───────── BLE advert queue ───────── */
 #define RAW_LEN 32
-
-/* ───────── UI handles ───────── */
 #define SEG_CNT 8
-static lv_obj_t *left_seg [SEG_CNT];
-static lv_obj_t *right_seg[SEG_CNT];
-static lv_obj_t *centre_lbl  = NULL;
 
-/* basic styles (1-time init) */
+static lv_obj_t *left_seg[SEG_CNT];
+static lv_obj_t *right_seg[SEG_CNT];
+static lv_obj_t *centre_lbl = NULL;
+
 static lv_style_t st_off, st_green, st_yellow, st_red;
 
-/* ───────── BLE scan params ───────── */
-static const struct bt_le_scan_param scan_param = {
-        .type     = BT_HCI_LE_SCAN_ACTIVE,
-        .options  = BT_LE_SCAN_OPT_NONE,
-        .interval = 0x0010,
-        .window   = 0x0010,
+struct ble_display_data {
+    int cmd;
+    int int_part;
+    int frac_part;
 };
+K_MSGQ_DEFINE(ble_ui_msgq, sizeof(struct ble_display_data), 10, 4);
 
-/* ───────── BLE advert helpers ───────── */
-static bool ad_extract_rpi_msg(struct bt_data *data, void *user_data)
+static bool parse_ble_payload(char *payload, struct ble_display_data *d)
 {
-    char *mfg_buf = user_data;
-    if (data->type == BT_DATA_MANUFACTURER_DATA) {
-        size_t len = MIN(data->data_len, 30);
-        // Skip the 2-byte manufacturer ID (e.g., 0xFFFF)
-        if (data->data_len > 2) {
-            memcpy(mfg_buf, data->data + 2, len - 2);
-            mfg_buf[len - 2] = '\0';
-        } else {
-            mfg_buf[0] = '\0';  // Invalid manufacturer payload
-        }
-        return false;
-    }
+    char *p = payload + 3; // skip "B1:"
+    char *tok;
+
+    tok = strtok(p, ",");
+    if (!tok) return false;
+    d->cmd = atoi(tok);
+
+    tok = strtok(NULL, ",");
+    if (!tok || !strchr(tok, '.')) return false;
+
+    char *dot = strchr(tok, '.');
+    *dot = '\0';
+    d->int_part = atoi(tok);
+    d->frac_part = atoi(dot + 1);
+
+    // ignore pan, tilt
     return true;
 }
 
-/* ───────── UI helpers ───────── */
+static bool ad_extract_and_parse(struct bt_data *data, void *user_data)
+{
+    char *mfg_buf = user_data;
+
+    if (data->type == BT_DATA_MANUFACTURER_DATA && data->data_len > 2) {
+        size_t len = data->data_len - 2;
+        if (len >= RAW_LEN) len = RAW_LEN - 1;
+
+        memcpy(mfg_buf, data->data + 2, len);
+        mfg_buf[len] = '\0';
+
+        if (strncmp(mfg_buf, "B1:", 3) == 0) {
+            struct ble_display_data d;
+            if (parse_ble_payload(mfg_buf, &d)) {
+                d.cmd = CLAMP(d.cmd, 0, 3);
+                k_msgq_put(&ble_ui_msgq, &d, K_NO_WAIT);
+            } else {
+                printk("[BLE] Malformed: %s\n", mfg_buf);
+            }
+        }
+    }
+
+    return true;
+}
+
+static void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
+                    uint8_t type, struct net_buf_simple *ad)
+{
+    char mfg_buf[RAW_LEN] = {0};
+    bt_data_parse(ad, ad_extract_and_parse, mfg_buf);
+}
+
 static void seg_set_style(lv_obj_t *seg, lv_style_t *st)
 {
     lv_obj_remove_style_all(seg);
@@ -57,42 +88,36 @@ static void seg_set_style(lv_obj_t *seg, lv_style_t *st)
 
 static void draw_static_ui(void)
 {
-    /* background */
     lv_obj_t *bg = lv_obj_create(lv_scr_act());
     lv_obj_set_size(bg, SCR_W, SCR_H);
     lv_obj_clear_flag(bg, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(bg, lv_color_black(), 0);
 
-    /* centre label */
     centre_lbl = lv_label_create(lv_scr_act());
     lv_obj_set_style_text_color(centre_lbl, lv_color_hex(0xFF3030), 0);
     lv_obj_set_style_text_font(centre_lbl, &lv_font_montserrat_28, 0);
     lv_label_set_text(centre_lbl, "0.0 m");
     lv_obj_align(centre_lbl, LV_ALIGN_CENTER, 0, 0);
 
-    /* segment blocks */
     int seg_w = 10, seg_h = 22, gap = 2;
     int start_x_left  = (SCR_W/2) - gap - seg_w;
     int start_x_right = (SCR_W/2) + gap;
 
     for (int i = 0; i < SEG_CNT; ++i) {
-        /* left side – draw outward from centre */
         left_seg[i] = lv_obj_create(lv_scr_act());
         lv_obj_set_size(left_seg[i], seg_w, seg_h);
         int x = start_x_left - i*(seg_w+gap);
         lv_obj_align(left_seg[i], LV_ALIGN_CENTER, -((SCR_W/2)-x), 0);
 
-        /* right side – draw outward */
         right_seg[i] = lv_obj_create(lv_scr_act());
         lv_obj_set_size(right_seg[i], seg_w, seg_h);
         x = start_x_right + i*(seg_w+gap);
         lv_obj_align(right_seg[i], LV_ALIGN_CENTER, ((x-(SCR_W/2))), 0);
 
-        seg_set_style(left_seg [i], &st_off);
+        seg_set_style(left_seg[i], &st_off);
         seg_set_style(right_seg[i], &st_off);
     }
 
-    /* L / R letters */
     lv_obj_t *lblL = lv_label_create(lv_scr_act());
     lv_label_set_text(lblL, "L");
     lv_obj_set_style_text_color(lblL, lv_color_white(), 0);
@@ -134,37 +159,6 @@ static void light_segments(lv_obj_t **arr, int count)
     }
 }
 
-struct ble_display_data {
-    int cmd;
-    int int_part;
-    int frac_part;
-};
-K_MSGQ_DEFINE(ble_ui_msgq, sizeof(struct ble_display_data), 10, 4);
-
-
-static void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
-                    uint8_t type, struct net_buf_simple *ad)
-{
-    char mfg_buf[RAW_LEN] = {0};
-    bt_data_parse(ad, ad_extract_rpi_msg, mfg_buf);
-
-    if (strncmp(mfg_buf, "B1:", 3) == 0) {
-        printk("HIIIII1\n");
-
-        struct ble_display_data d;
-        char cam_pan_buf[5] = {0};
-        char cam_tilt_buf[5] = {0};
-
-        if (sscanf(mfg_buf + 3, "%d,%d.%d,%4s,%4s",
-                   &d.cmd, &d.int_part, &d.frac_part,
-                   cam_pan_buf, cam_tilt_buf) == 5) {
-            printk("BLE parsed: cmd=%d, dist=%d.%02d\n", d.cmd, d.int_part, d.frac_part);
-            k_msgq_put(&ble_ui_msgq, &d, K_NO_WAIT);
-        }
-    }
-}
-
-/* ───────── Display + BLE init ───────── */
 static void setup_display_and_ble(void)
 {
     const struct device *disp = DEVICE_DT_GET(ILI_NODE);
@@ -184,12 +178,18 @@ static void setup_display_and_ble(void)
         return;
     }
 
+    static const struct bt_le_scan_param scan_param = {
+            .type     = BT_HCI_LE_SCAN_ACTIVE,
+            .options  = BT_LE_SCAN_OPT_NONE,
+            .interval = 0x0008,
+            .window   = 0x0008,
+    };
+
     err = bt_le_scan_start(&scan_param, scan_cb);
     if (err) LOG_ERR("bt_le_scan_start: %d", err);
     else     LOG_INF("BLE scan started");
 }
 
-/* ───────── Main UI thread ───────── */
 static void ui_thread(void *a, void *b, void *c)
 {
     ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
@@ -200,11 +200,11 @@ static void ui_thread(void *a, void *b, void *c)
         if (k_msgq_get(&ble_ui_msgq, &d, K_NO_WAIT) == 0) {
             const char *text = NULL;
             switch (d.cmd) {
-                case 0: text = "GO";    break;
-                case 1: text = "STOP";  break;
-                case 2: text = "LEFT";  break;
-                case 3: text = "RIGHT"; break;
-                default: text = "NONE";  break;
+                case 0: text = "Go Forward"; break;
+                case 1: text = "Stop";       break;
+                case 2: text = "Turn Left";       break;
+                case 3: text = "Turn right"; break;
+                default: text = "None";      break;
             }
 
             char display_buf[64];
@@ -215,7 +215,7 @@ static void ui_thread(void *a, void *b, void *c)
             light_segments(left_seg,  (d.cmd == 1) ? 8 : (d.cmd == 2) ? 6 : (d.cmd == 3) ? 2 : 2);
             light_segments(right_seg, (d.cmd == 1) ? 8 : (d.cmd == 2) ? 2 : (d.cmd == 3) ? 6 : 2);
 
-            printk("Displayed command: %s\n", text);
+            printk("[Gesture] %s (%d.%02dm)\n", text, d.int_part, d.frac_part);
         }
 
         lv_timer_handler();
@@ -223,7 +223,6 @@ static void ui_thread(void *a, void *b, void *c)
     }
 }
 
-/* ───────── Thread bootstrap ───────── */
 K_THREAD_STACK_DEFINE(ui_stack_area, 8192);
 static struct k_thread ui_thread_data;
 
