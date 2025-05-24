@@ -103,6 +103,7 @@ if __name__ == "__main__":
     try:
         gesture = 0
         while True:
+            gesture = (gesture % 4) + 1
             int_part = gesture % 10
             frac_part = (gesture * 7) % 100
             val1 = (gesture * 3) % 1000
@@ -111,7 +112,6 @@ if __name__ == "__main__":
             payload = f"B1:{gesture},{int_part}.{frac_part:02d},{val1:04d},{val2:04d}"
             advertiser.update_payload(payload)
             time.sleep(1)
-            gesture += 1
     except KeyboardInterrupt:
         print("\n[MAIN] Stopping advertiser...")
         advertiser.stop()
