@@ -20,11 +20,11 @@ LOST_TIMEOUT      = 5.0
 SPECIAL_CMD       = 2000
 
 # ─── MQTT Setup ───
-MQTT_BROKER = "192.168.0.77"
+MQTT_BROKER = "172.20.10.11"
 MQTT_PORT = 1883
 MQTT_TOPIC = "arcnotrust/data"
 
-mqtt_client = mqtt.Client()
+mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
 mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
 # ─── MediaPipe helpers ───
@@ -159,7 +159,7 @@ def extract_accel(payload):
 def main():
     last_distance = None
     last_gesture = None
-    cam = Camera("http://192.168.0.111:81/stream")
+    cam = Camera("http://172.20.10.14:81/stream")
     advertiser = BLEAdvertiserThread()
     advertiser.start()
     scanner = BLEScannerThread()
