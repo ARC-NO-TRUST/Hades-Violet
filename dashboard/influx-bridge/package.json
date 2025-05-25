@@ -10,7 +10,8 @@
     "@influxdata/influxdb-client": "^1.30.0",
     "axios": "^1.9.0",
     "body-parser": "^2.2.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "mqtt": "^5.13.0"
   },
   "keywords": [],
   "author": "",
