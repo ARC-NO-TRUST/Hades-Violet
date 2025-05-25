@@ -166,8 +166,8 @@ def main():
     scanner.start()
     scanner_queue = scanner.get_queue()
 
-    pid_pan  = PID(2.5, .1, .2, deadband=5, max_change=50)
-    pid_tilt = PID(2.5, .1, .2, deadband=5, max_change=50)
+    pid_pan  = PID(2.5,.1,.2, deadband=5, max_change=50)
+    pid_tilt = PID(2.5,.1,.2, deadband=5, max_change=50)
 
     buf, deb_pose = deque(maxlen=BUF_LEN), "NONE"
     last_seen = time.time()
@@ -177,7 +177,7 @@ def main():
     cv2.namedWindow("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN)
     cv2.setWindowProperty("Pose + HeadBox", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-    accel_pos = {"x": 0, "y": 0, "z": 0}
+    accel_pos = {"x": 0, "y": 0, "z":0}
     gesture = -1
 
     with mp_p.Pose(model_complexity=0, min_detection_confidence=.5, min_tracking_confidence=.5) as pose:
@@ -185,47 +185,41 @@ def main():
             while True:
                 f = cam.read()
                 if f is None:
-                    time.sleep(.001)
-                    continue
-                h, w = f.shape[:2]
-                rgb = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
-                rgb.flags.writeable = False
+                    time.sleep(.001); continue
+                h,w = f.shape[:2]
+                rgb = cv2.cvtColor(f,cv2.COLOR_BGR2RGB); rgb.flags.writeable=False
                 res = pose.process(rgb)
-                img = f.copy()
-                raw = "NONE"
+                img = f.copy(); raw="NONE"
 
                 if res.pose_landmarks:
                     if lost_active:
-                        lost_active = False
-                    last_seen = time.time()
-                    lm = res.pose_landmarks.landmark
-                    raw = classify(lm, accel_pos=accel_pos)
-                    mp_d.draw_landmarks(img, res.pose_landmarks, mp_p.POSE_CONNECTIONS)
+                        lost_active=False
+                    last_seen=time.time()
+                    lm=res.pose_landmarks.landmark
+                    raw=classify(lm, accel_pos=accel_pos)
+                    mp_d.draw_landmarks(img,res.pose_landmarks,mp_p.POSE_CONNECTIONS)
 
-                    x1, y1, x2, y2 = body_box(lm, w, h)
-                    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 255), 3)
+                    x1,y1,x2,y2 = body_box(lm,w,h); cx,cy = (x1+x2)//2,(y1+y2)//2
+                    cv2.rectangle(img,(x1,y1),(x2,y2),(0,255,255),3)
 
-                    err_x, err_y = w // 2 - cx, h // 2 - cy
-                    pan = pid_pan.update(err_x)
-                    tilt = max(min(pid_tilt.update(err_y), 50), -50)
+                    err_x,err_y = w//2 - cx, h//2 - cy
+                    pan  = pid_pan.update(err_x)
+                    tilt = max(min(pid_tilt.update(err_y),50),-50)
 
-                    advertiser.update_pan((1 if pan >= 0 else 0) * 1000 + min(abs(int(pan)), 999))
-                    advertiser.update_tilt((1 if tilt >= 0 else 0) * 1000 + min(abs(int(tilt)), 999))
+                    advertiser.update_pan((1 if pan>=0 else 0)*1000 + min(abs(int(pan)),999))
+                    advertiser.update_tilt((1 if tilt>=0 else 0)*1000 + min(abs(int(tilt)),999))
 
                 else:
-                    if not lost_active and time.time() - last_seen > LOST_TIMEOUT:
-                        lost_active = True
-                        pid_pan.reset()
-                        pid_tilt.reset()
+                    if not lost_active and time.time()-last_seen > LOST_TIMEOUT:
+                        lost_active=True
+                        pid_pan.reset(); pid_tilt.reset()
                         advertiser.update_pan(SPECIAL_CMD)
                         advertiser.update_tilt(SPECIAL_CMD)
 
                 buf.append(raw)
-                top = max(set(buf), key=buf.count)
-                if buf.count(top) >= REQUIRED:
-                    deb_pose = top
-                cv2.putText(img, deb_pose, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, .6, (0, 0, 255), 2)
+                top=max(set(buf), key=buf.count)
+                if buf.count(top)>=REQUIRED: deb_pose=top
+                cv2.putText(img,deb_pose,(10,20), cv2.FONT_HERSHEY_SIMPLEX,.6,(0,0,255),2)
 
                 if deb_pose == "GO":
                     gesture = 0
@@ -235,10 +229,10 @@ def main():
                     gesture = 2
                 elif deb_pose == "RIGHT":
                     gesture = 3
-                else:
-                    gesture = -1
+                    
+                advertiser.update_gesture(gesture)
 
-                if ((gesture != last_gesture and gesture != -1) or last_distance is not None):
+                if gesture != last_gesture or last_distance is not None:
                     payload = {
                         "gesture": gesture,
                         "distance": last_distance
@@ -246,14 +240,12 @@ def main():
                     mqtt_client.publish(MQTT_TOPIC, json.dumps(payload))
                     last_gesture = gesture
 
-                now = time.time()
-                fps = 1 / (now - prev_ts)
-                prev_ts = now
-                fps_ema = fps if fps_ema == 0 else FPS_ALPHA * fps + (1 - FPS_ALPHA) * fps_ema
-                cv2.putText(img, f"{fps_ema:4.1f} FPS", (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 255, 0), 2)
+                now=time.time(); fps=1/(now-prev_ts); prev_ts=now
+                fps_ema = fps if fps_ema==0 else FPS_ALPHA*fps+(1-FPS_ALPHA)*fps_ema
+                cv2.putText(img,f"{fps_ema:4.1f} FPS",(10,h-10), cv2.FONT_HERSHEY_SIMPLEX,.5,(0,255,0),2)
 
-                cv2.imshow("Pose + HeadBox", cv2.resize(img, (1280, 720)))
-                if cv2.waitKey(1) & 0xFF in (27, ord('q')):
+                cv2.imshow("Pose + HeadBox", cv2.resize(img,(1280,720)))
+                if cv2.waitKey(1) & 0xFF in (27,ord('q')):
                     break
 
                 try:
@@ -287,10 +279,8 @@ def main():
 
         finally:
             mqtt_client.disconnect()
-            advertiser.stop()
-            advertiser.join()
-            cam.release()
-            cv2.destroyAllWindows()
+            advertiser.stop(); advertiser.join()
+            cam.release(); cv2.destroyAllWindows()
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
