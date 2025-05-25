@@ -9,21 +9,30 @@
 #include <stdlib.h>
 #include <math.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/shell/shell.h>
 
 LOG_MODULE_REGISTER(nrf, LOG_LEVEL_INF);
 
 #define PWM_PERIOD_USEC 20000
 
-#define PAN_LEFT_USEC   2600
-#define PAN_RIGHT_USEC  700
+#define PAN_LEFT_USEC 2600
+#define PAN_RIGHT_USEC 700
 #define PAN_CENTER_USEC 1700
 
-#define TILT_DOWN_USEC  500
-#define TILT_UP_USEC    2000
+#define TILT_DOWN_USEC 500
+#define TILT_UP_USEC 2000
 #define TILT_CENTER_USEC 1000
 
+#define CAM_PAN_STEP_USEC 200
+#define CAM_TILT_STEP_USEC 100
+
+#define CAM_PAN_MIN_USEC 800
 #define CAM_PAN_CENTER_USEC 1300
+#define CAM_PAN_MAX_USEC 1800
+
+#define CAM_TILT_MIN_USEC 800
 #define CAM_TILT_CENTER_USEC 1100
+#define CAM_TILT_MAX_USEC 1400
 
 static const struct pwm_dt_spec motor_pan = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_pan));
 static const struct pwm_dt_spec motor_tilt = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_tilt));
@@ -227,6 +236,160 @@ void bt_scan_thread_fn(void)
   }
 }
 
+static int clamp(const struct shell *shell, int val, int min, int max, const char *label) {
+  if (val < min) {
+    shell_print(shell, "%s reached minimum limit (%d)", label, min);
+    return min;
+  }
+  if (val > max) {
+    shell_print(shell, "%s reached maximum limit (%d)", label, max);
+    return max;
+  }
+  return val;
+}
+
+// Shell commands
+static int cmd_simulate(const struct shell *shell, size_t argc, char **argv) {
+  if (argc != 3) {
+    shell_print(shell, "Usage: simulate <gesture:go|stop|left|right> <distance:float>");
+    return -EINVAL;
+  }
+
+  const char *gesture = argv[1];
+  float distance = strtof(argv[2], NULL);
+  int cmd = -1;
+
+  if (strcmp(gesture, "go") == 0) {
+    cmd = 0;
+  } else if (strcmp(gesture, "stop") == 0) {
+    cmd = 1;
+  } else if (strcmp(gesture, "left") == 0) {
+    cmd = 2;
+  } else if (strcmp(gesture, "right") == 0) {
+    cmd = 3;
+  } else {
+    shell_print(shell, "Invalid gesture: %s", gesture);
+    return -EINVAL;
+  }
+
+  handle_command(cmd);
+
+  int int_part = (int)distance;
+  int frac_part = (int)((distance - int_part) * 100);
+  handle_distance(int_part, frac_part);
+
+  shell_print(shell, "Simulating gesture %s and distance %d.%02d", gesture, int_part, frac_part);
+  return 0;
+}
+
+static int cmd_tone(const struct shell *shell, size_t argc, char **argv) {
+  if (argc != 2) {
+    shell_print(shell, "Usage: tone <off|on|distance:float>");
+    return -EINVAL;
+  }
+
+  const char *arg = argv[1];
+
+  if (strcmp(arg, "off") == 0) {
+    k_mutex_lock(&tone_ctrl.lock, K_FOREVER);
+    tone_ctrl.active = false;
+    k_mutex_unlock(&tone_ctrl.lock);
+    shell_print(shell, "Tone disabled");
+  } else if (strcmp(arg, "on") == 0) {
+    k_mutex_lock(&tone_ctrl.lock, K_FOREVER);
+    tone_ctrl.active = true;
+    k_mutex_unlock(&tone_ctrl.lock);
+    shell_print(shell, "Tone enabled");
+  } else {
+    float d = strtof(arg, NULL);
+    int int_part = (int)d;
+    int frac_part = (int)((d - int_part) * 100);
+    handle_distance(int_part, frac_part);
+    shell_print(shell, "Tone set for distance %d.%02d", int_part, frac_part);
+  }
+
+  return 0;
+}
+
+static int cmd_pt(const struct shell *shell, size_t argc, char **argv) {
+  if (argc < 3) {
+    shell_print(shell, "Usage: pt <cam|motor> <args>");
+    return -EINVAL;
+  }
+
+  const char *target = argv[1];
+
+  if (strcmp(target, "cam") == 0) {
+    if (argc != 4) {
+      shell_print(shell, "Usage: pt cam <pan|tilt> <left|right|center|up|down>");
+      return -EINVAL;
+    }
+
+    const char *axis = argv[2];
+    const char *dir = argv[3];
+    int pulse = 0;
+
+    if (strcmp(axis, "pan") == 0) {
+      if (strcmp(dir, "left") == 0) {
+        cam_pan_pos -= CAM_PAN_STEP_USEC;
+      } else if (strcmp(dir, "right") == 0) {
+        cam_pan_pos += CAM_PAN_STEP_USEC;
+      } else if (strcmp(dir, "center") == 0) {
+        cam_pan_pos = CAM_PAN_CENTER_USEC;
+      } else {
+        shell_print(shell, "Invalid direction for pan: %s", dir);
+        return -EINVAL;
+      }
+      cam_pan_pos = clamp(shell, cam_pan_pos, CAM_PAN_MIN_USEC, CAM_PAN_MAX_USEC, "Cam pan");
+      pulse = cam_pan_pos;
+      pwm_set(cam_pan.dev, cam_pan.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(pulse), 0);
+    } else if (strcmp(axis, "tilt") == 0) {
+      if (strcmp(dir, "up") == 0) {
+        cam_tilt_pos -= CAM_TILT_STEP_USEC;
+      } else if (strcmp(dir, "down") == 0) {
+        cam_tilt_pos += CAM_TILT_STEP_USEC;
+      } else if (strcmp(dir, "center") == 0) {
+        cam_tilt_pos = CAM_TILT_CENTER_USEC;
+      } else {
+        shell_print(shell, "Invalid direction for tilt: %s", dir);
+        return -EINVAL;
+      }
+      cam_tilt_pos = clamp(shell, cam_tilt_pos, CAM_TILT_MIN_USEC, CAM_TILT_MAX_USEC, "Cam tilt");
+      pulse = cam_tilt_pos;
+      pwm_set(cam_tilt.dev, cam_tilt.channel, PWM_USEC(PWM_PERIOD_USEC), PWM_USEC(pulse), 0);
+    } else {
+      shell_print(shell, "Invalid axis: %s", axis);
+      return -EINVAL;
+    }
+
+    shell_print(shell, "Moved cam %s to %s -> pulse = %d", axis, dir, pulse);
+  } else if (strcmp(target, "motor") == 0) {
+    const char *action = argv[2];
+    if (strcmp(action, "go") == 0) {
+      handle_command(0);
+    } else if (strcmp(action, "stop") == 0) {
+      handle_command(1);
+    } else if (strcmp(action, "left") == 0) {
+      handle_command(2);
+    } else if (strcmp(action, "right") == 0) {
+      handle_command(3);
+    } else {
+      shell_print(shell, "Invalid motor action: %s", action);
+      return -EINVAL;
+    }
+    shell_print(shell, "Moved motor for action %s", action);
+  } else {
+    shell_print(shell, "Unknown target: %s", target);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+SHELL_CMD_REGISTER(simulate, NULL, "Simulate <gesture> <distance>", cmd_simulate);
+SHELL_CMD_REGISTER(tone, NULL, "Tone control or simulate distance tone", cmd_tone);
+SHELL_CMD_REGISTER(pt, NULL, "Pan-tilt control for cam or motor", cmd_pt);
+
 void main(void)
 {
   if (!device_is_ready(motor_pan.dev) || !device_is_ready(motor_tilt.dev)
@@ -253,5 +416,5 @@ void main(void)
                   (k_thread_entry_t)bt_scan_thread_fn,
                   NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
   k_thread_create(&tone_thread_data, tone_stack_area, K_THREAD_STACK_SIZEOF(tone_stack_area),
-                  tone_thread_fn, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
+                  (k_thread_entry_t)tone_thread_fn, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
 }
