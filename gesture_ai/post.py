@@ -20,7 +20,7 @@ LOST_TIMEOUT      = 5.0
 SPECIAL_CMD       = 2000
 
 # ─── MQTT Setup ───
-MQTT_BROKER = "localhost"
+MQTT_BROKER = "192.168.0.77"
 MQTT_PORT = 1883
 MQTT_TOPIC = "arcnotrust/data"
 
