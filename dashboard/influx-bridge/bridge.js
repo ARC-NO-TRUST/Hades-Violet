@@ -82,12 +82,16 @@ mqttClient.on('message', async (topic, message) => {
 
     try {
         const data = JSON.parse(message.toString());
-        const { gesture, distance } = data;
+        let { gesture, distance } = data;
+
+        if (distance === null || distance === undefined) {
+            distance = 0;
+        }
 
         console.log(`Parsed Gesture: ${gesture}, Distance: ${distance}`);
 
-        if (gesture === undefined || distance === undefined) {
-            console.warn('MQTT payload missing fields:', message.toString());
+        if (gesture === undefined) {
+            console.warn('MQTT payload missing "gesture" field:', message.toString());
             return;
         }
 
