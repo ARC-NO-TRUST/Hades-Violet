@@ -34,6 +34,8 @@ LOG_MODULE_REGISTER(nrf, LOG_LEVEL_INF);
 #define CAM_TILT_CENTER_USEC 1100
 #define CAM_TILT_MAX_USEC 1400
 
+static int tone_volume_factor = 1000;
+
 static const struct pwm_dt_spec motor_pan = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_pan));
 static const struct pwm_dt_spec motor_tilt = PWM_DT_SPEC_GET(DT_ALIAS(motor_servo_tilt));
 static const struct pwm_dt_spec speaker = PWM_DT_SPEC_GET(DT_ALIAS(speaker_out));
@@ -71,7 +73,7 @@ void play_tone(uint32_t freq_hz, uint32_t duration_ms)
   }
 
   uint32_t period = 1000000 / freq_hz;
-  uint32_t pulse = period / 100;
+  uint32_t pulse = period / tone_volume_factor;
 
   int ret = pwm_set_dt(&speaker, PWM_USEC(period), PWM_USEC(pulse));
   if (ret < 0) {
@@ -291,14 +293,10 @@ static int cmd_tone(const struct shell *shell, size_t argc, char **argv) {
   const char *arg = argv[1];
 
   if (strcmp(arg, "off") == 0) {
-    k_mutex_lock(&tone_ctrl.lock, K_FOREVER);
-    tone_ctrl.active = false;
-    k_mutex_unlock(&tone_ctrl.lock);
+    tone_volume_factor = 10000;
     shell_print(shell, "Tone disabled");
   } else if (strcmp(arg, "on") == 0) {
-    k_mutex_lock(&tone_ctrl.lock, K_FOREVER);
-    tone_ctrl.active = true;
-    k_mutex_unlock(&tone_ctrl.lock);
+    tone_volume_factor = 1000;
     shell_print(shell, "Tone enabled");
   } else {
     float d = strtof(arg, NULL);
@@ -330,9 +328,9 @@ static int cmd_pt(const struct shell *shell, size_t argc, char **argv) {
     int pulse = 0;
 
     if (strcmp(axis, "pan") == 0) {
-      if (strcmp(dir, "left") == 0) {
+      if (strcmp(dir, "right") == 0) {
         cam_pan_pos -= CAM_PAN_STEP_USEC;
-      } else if (strcmp(dir, "right") == 0) {
+      } else if (strcmp(dir, "left") == 0) {
         cam_pan_pos += CAM_PAN_STEP_USEC;
       } else if (strcmp(dir, "center") == 0) {
         cam_pan_pos = CAM_PAN_CENTER_USEC;
