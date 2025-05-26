@@ -3,10 +3,33 @@
         ultrasonic = &ultrasonic_sensor;
     };
 
+    chosen {
+      zephyr,flash = &flash0;
+      zephyr,code-partition = &code_partition;
+    }
+
     ultrasonic_sensor: hcsr04 {
         compatible = "hc-sr04";
         label = "HC-SR04 Ultrasonic Sensor";
         trigger-gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
         echo-gpios = <&gpio0 31 GPIO_ACTIVE_HIGH>;
+    };
+
+    &flash0 {
+        partitions {
+            compatible = "fixed-partitions";
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            code_partition: partition@0 {
+                label = "code";
+                reg = <0x00000000 0x0007C000>;
+            };
+
+            storage_partition: partition@7c000 {
+                label = "storage";
+                reg = <0x0007C000 0x00004000>;
+            };
+        };
     };
 };
