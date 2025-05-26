@@ -56,7 +56,6 @@ static bool ad_extract_and_parse(struct bt_data *data, void *user_data)
         if (strncmp(mfg_buf, "B1:", 3) == 0) {
             struct ble_display_data d;
             if (parse_ble_payload(mfg_buf, &d)) {
-                d.cmd = CLAMP(d.cmd, 0, 3);
                 k_msgq_put(&ble_ui_msgq, &d, K_NO_WAIT);
             } else {
                 printk("[BLE] Malformed: %s\n", mfg_buf);
@@ -108,7 +107,6 @@ static void setup_display_and_ble(void)
 
     lv_init();
     display_blanking_off(disp);
-    init_styles();
     draw_static_ui();
 
     int err = bt_enable(NULL);
