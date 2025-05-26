@@ -249,7 +249,7 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
       handle_distance(int_part, frac_part);
       handle_camera_movement(cam_pan_buf, cam_tilt_buf);
 
-      const char *gesture_str = "None";
+      const char *gesture_str = NULL;
       if (cmd == 0) {
         gesture_str = "Go";
       } else if (cmd == 1) {
@@ -259,10 +259,13 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
       } else if (cmd == 3) {
         gesture_str = "Right";
       }
-      char line[LOG_MSG_MAX_LEN];
-      snprintf(line, sizeof(line), "Gesture: %s, Distance: %d.%02dm\n", gesture_str, int_part, frac_part);
-      if (logging_enabled && k_msgq_put(&log_msgq, &line, K_NO_WAIT) != 0) {
-        printk("Log queue full, dropping log entry\n");
+
+      if (gesture_str && logging_enabled) {
+        char line[LOG_MSG_MAX_LEN];
+        snprintf(line, sizeof(line), "Gesture: %s, Distance: %d.%02dm\n", gesture_str, int_part, frac_part);
+        if (k_msgq_put(&log_msgq, &line, K_NO_WAIT) != 0) {
+          printk("Log queue full, dropping log entry\n");
+        }
       }
     } else {
       LOG_WRN("Malformed B1 packet: %s", mfg_buf);
