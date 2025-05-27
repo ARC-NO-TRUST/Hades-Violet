@@ -118,8 +118,8 @@ static void setup_display_and_ble(void)
     static const struct bt_le_scan_param scan_param = {
             .type     = BT_HCI_LE_SCAN_ACTIVE,
             .options  = BT_LE_SCAN_OPT_NONE,
-            .interval = 0x0008,
-            .window   = 0x0008,
+            .interval = 0x0010,
+            .window   = 0x0010,
     };
 
     err = bt_le_scan_start(&scan_param, scan_cb);
