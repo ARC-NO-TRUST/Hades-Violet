@@ -482,25 +482,44 @@ static int cmd_simulate(const struct shell *shell, size_t argc, char **argv) {
 }
 
 static int cmd_tone(const struct shell *shell, size_t argc, char **argv) {
-  if (argc != 2) {
-    shell_print(shell, "Usage: tone <off|on|distance:float>");
+  if (argc < 2) {
+    shell_print(shell, "Usage: tone <off|on|volume <int>|distance <float>>");
     return -EINVAL;
   }
 
-  const char *arg = argv[1];
+  const char *subcmd = argv[1];
 
-  if (strcmp(arg, "off") == 0) {
+  if (strcmp(subcmd, "off") == 0) {
     tone_volume_factor = 10000;
     shell_print(shell, "Tone disabled");
-  } else if (strcmp(arg, "on") == 0) {
+  } else if (strcmp(subcmd, "on") == 0) {
     tone_volume_factor = 1000;
-    shell_print(shell, "Tone enabled");
-  } else {
-    float d = strtof(arg, NULL);
+    shell_print(shell, "Tone enabled (default volume)");
+  } else if (strcmp(subcmd, "volume") == 0) {
+    if (argc != 3) {
+      shell_print(shell, "Usage: tone volume <int>");
+      return -EINVAL;
+    }
+    int vol = atoi(argv[2]);
+    if (vol <= 0) {
+      shell_print(shell, "Invalid volume.");
+      return -EINVAL;
+    }
+    tone_volume_factor = vol;
+    shell_print(shell, "Tone volume factor set to %d", vol);
+  } else if (strcmp(subcmd, "distance") == 0) {
+    if (argc != 3) {
+      shell_print(shell, "Usage: tone distance <float>");
+      return -EINVAL;
+    }
+    float d = strtof(argv[2], NULL);
     int int_part = (int)d;
     int frac_part = (int)((d - int_part) * 100);
     handle_distance(int_part, frac_part);
-    shell_print(shell, "Tone set for distance %d.%02d", int_part, frac_part);
+    shell_print(shell, "Tone set for distance %d.%02dm", int_part, frac_part);
+  } else {
+    shell_print(shell, "Unknown tone command: %s", subcmd);
+    return -EINVAL;
   }
 
   return 0;
