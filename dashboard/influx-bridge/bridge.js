@@ -7,13 +7,13 @@ const app = express();
 const port = 4000;
 
 // InfluxDB settings
-const INFLUX_URL = 'http://172.20.10.11:8086/api/v2/write';
+const INFLUX_URL = 'http://172.20.10.3:8086/api/v2/write';
 const ORG = 'csse4011org';
 const BUCKET = 'csse4011bucket';
 const TOKEN = 'MWskLjvhS6Qh6Oa7cfnP-atlV6VfE6jys_w2GnVzuovA3f7ejA-ZO2RNtLI6GN4lLkzkG8A-lv4adE11i57nNA==';
 
 // MQTT setup
-const MQTT_BROKER = 'mqtt://172.20.10.11';
+const MQTT_BROKER = 'mqtt://172.20.10.3';
 const MQTT_TOPIC = 'arcnotrust/data';
 const mqttClient = mqtt.connect(MQTT_BROKER);
 

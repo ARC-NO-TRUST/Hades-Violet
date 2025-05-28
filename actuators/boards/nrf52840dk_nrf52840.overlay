@@ -5,6 +5,8 @@
         cam-servo-pan = &cam_servo_pan;
         cam-servo-tilt = &cam_servo_tilt;
         speaker-out = &speaker_pwm;
+        rgb-data = &rgb_data;
+        rgb-clock = &rgb_clock;
     };
 
     pwmleds {
@@ -34,6 +36,20 @@
         cam_servo_tilt: tilt2_led {
             pwms = <&pwm2 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;  // P0.30
             label = "Cam Tilt Servo";
+        };
+    };
+
+    rgb_gpios {
+        compatible = "gpio-leds";
+
+        rgb_data: rgb_data {
+            gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+            label = "RGB Data GPIO";
+        };
+
+        rgb_clock: rgb_clock {
+            gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+            label = "RGB Clock GPIO";
         };
     };
 };

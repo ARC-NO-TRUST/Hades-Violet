@@ -12,6 +12,8 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/drivers/gpio.h>
+#include <hal/nrf_gpio.h>
 
 LOG_MODULE_REGISTER(nrf, LOG_LEVEL_INF);
 
@@ -52,9 +54,20 @@ static int32_t cam_tilt_pos = CAM_TILT_CENTER_USEC;
 #define PRIORITY 5
 
 #define LOG_QUEUE_SIZE 10
+#define RGB_QUEUE_SIZE 10
 #define LOG_MSG_MAX_LEN 64
 
+#define RGB_DATA_NODE DT_ALIAS(rgb_data)
+#define RGB_CLK_NODE DT_ALIAS(rgb_clock)
+
+static const struct gpio_dt_spec rgb_di_spec = GPIO_DT_SPEC_GET(RGB_DATA_NODE, gpios);
+static const struct gpio_dt_spec rgb_ci_spec = GPIO_DT_SPEC_GET(RGB_CLK_NODE, gpios);
+
+#define RGB_DI 3
+#define RGB_CI 4
+
 K_MSGQ_DEFINE(log_msgq, LOG_MSG_MAX_LEN, LOG_QUEUE_SIZE, 4);
+K_MSGQ_DEFINE(rgb_msgq, sizeof(int), RGB_QUEUE_SIZE, 4);
 
 K_THREAD_STACK_DEFINE(bt_scan_stack, STACK_SIZE);
 static struct k_thread bt_scan_thread_data;
@@ -62,6 +75,8 @@ K_THREAD_STACK_DEFINE(tone_stack_area, STACK_SIZE);
 static struct k_thread tone_thread_data;
 K_THREAD_STACK_DEFINE(log_thread_stack, STACK_SIZE);
 static struct k_thread log_thread_data;
+K_THREAD_STACK_DEFINE(rgb_thread_stack, STACK_SIZE);
+static struct k_thread rgb_thread_data;
 
 struct tone_control {
   struct k_mutex lock;
@@ -122,6 +137,117 @@ void tone_thread_fn(void *arg1, void *arg2, void *arg3)
 
     play_tone(1000, 200); // Always beep for 200 ms
     k_msleep(gap_duration); // Wait before next beep
+  }
+}
+
+void send_rgb_bit(uint8_t bit) {
+  gpio_pin_set_dt(&rgb_di_spec, bit); // Set Data line (DI)
+  k_sleep(K_USEC(10));
+  gpio_pin_set_dt(&rgb_ci_spec, 1);
+  k_sleep(K_USEC(10));
+  gpio_pin_set_dt(&rgb_ci_spec, 0);
+}
+
+void send_rgb_byte(uint8_t byte) {
+  for (int i = 7; i >= 0; i--) {
+    send_rgb_bit((byte >> i) & 1);
+  }
+}
+
+void send_rgb_colour(uint8_t red, uint8_t green, uint8_t blue) {
+  // Send 6-bit prefix based on colour MSB bits
+  uint8_t prefix = 0b11000000;
+  if (!(blue & 0x80)) {
+    prefix |= 0b00100000;
+  }
+  if (!(blue & 0x40)) {
+    prefix |= 0b00010000;
+  }
+  if (!(green & 0x80)) {
+    prefix |= 0b00001000;
+  }
+  if (!(green & 0x40)) {
+    prefix |= 0b00000100;
+  }
+  if (!(red & 0x80)) {
+    prefix |= 0b00000010;
+  }
+  if (!(red & 0x40)) {
+    prefix |= 0b00000001;
+  }
+
+  send_rgb_byte(prefix);
+  send_rgb_byte(blue);
+  send_rgb_byte(green);
+  send_rgb_byte(red);
+}
+
+void send_rgb_sequence(uint8_t red, uint8_t green, uint8_t blue) {
+  for (int i = 0; i < 4; i++) {
+    send_rgb_byte(0x00);  // Start frame
+  }
+  send_rgb_colour(red, green, blue);
+  for (int i = 0; i < 4; i++) {
+    send_rgb_byte(0x00);  // End frame
+  }
+}
+
+void rgb_thread_fn(void *arg1, void *arg2, void *arg3) {
+  int ret;
+  if (!device_is_ready(rgb_di_spec.port) || !device_is_ready(rgb_ci_spec.port)) {
+    printk("Error: RGB GPIO devices are not ready\n");
+    return;
+  }
+  ret = gpio_pin_configure_dt(&rgb_di_spec, GPIO_OUTPUT_ACTIVE);
+  if (ret < 0) {
+    printk("Error: Failed to configure RGB Data GPIO\n");
+    return;
+  }
+  ret = gpio_pin_configure_dt(&rgb_ci_spec, GPIO_OUTPUT_ACTIVE);
+  if (ret < 0) {
+    printk("Error: Failed to configure RGB Clock GPIO\n");
+    return;
+  }
+
+  while (1) {
+    int cmd;
+    static int last_cmd = -1;
+
+    if (k_msgq_get(&rgb_msgq, &cmd, K_FOREVER) == 0) {
+      last_cmd = cmd;
+    }
+
+    while (1) {
+      int new_cmd;
+      if (k_msgq_get(&rgb_msgq, &new_cmd, K_NO_WAIT) == 0) {
+        last_cmd = new_cmd;
+        break;
+      }
+
+      switch (last_cmd) {
+      case 0: // GO - Green
+        send_rgb_sequence(0, 255, 0);
+        break;
+      case 1: // STOP - Red
+        send_rgb_sequence(255, 0, 0);
+        break;
+      case 2: // LEFT - Yellow blink
+        send_rgb_sequence(255, 255, 0);
+        k_msleep(300);
+        send_rgb_sequence(0, 0, 0);
+        k_msleep(300);
+        continue;
+      case 3: // RIGHT - Blue blink
+        send_rgb_sequence(0, 0, 255);
+        k_msleep(300);
+        send_rgb_sequence(0, 0, 0);
+        k_msleep(300);
+        continue;
+      default:
+        send_rgb_sequence(0, 0, 0); // Default OFF
+        break;
+      }
+    }
   }
 }
 
@@ -267,6 +393,9 @@ void scan_cb(const bt_addr_le_t *addr, int8_t rssi,
           printk("Log queue full, dropping log entry\n");
         }
       }
+      if (k_msgq_put(&rgb_msgq, &cmd, K_NO_WAIT) != 0) {
+        printk("RGB queue full, dropping RGB entry\n");
+      }
     } else {
       LOG_WRN("Malformed B1 packet: %s", mfg_buf);
     }
@@ -343,6 +472,10 @@ static int cmd_simulate(const struct shell *shell, size_t argc, char **argv) {
   int int_part = (int)distance;
   int frac_part = (int)((distance - int_part) * 100);
   handle_distance(int_part, frac_part);
+
+  if (k_msgq_put(&rgb_msgq, &cmd, K_NO_WAIT) != 0) {
+    printk("RGB queue full, dropping RGB entry\n");
+  }
 
   shell_print(shell, "Simulating gesture %s and distance %d.%02d", gesture, int_part, frac_part);
   return 0;
@@ -601,9 +734,12 @@ void main(void)
   k_thread_create(&bt_scan_thread_data, bt_scan_stack, STACK_SIZE,
                   (k_thread_entry_t)bt_scan_thread_fn,
                   NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
-  k_thread_create(&tone_thread_data, tone_stack_area, K_THREAD_STACK_SIZEOF(tone_stack_area),
+  k_thread_create(&tone_thread_data, tone_stack_area, STACK_SIZE,
                   (k_thread_entry_t)tone_thread_fn, NULL, NULL, NULL, PRIORITY, 0, K_NO_WAIT);
   k_thread_create(&log_thread_data, log_thread_stack,STACK_SIZE,
                   (k_thread_entry_t)log_thread_fn, NULL, NULL, NULL,
+                  PRIORITY, 0, K_NO_WAIT);
+  k_thread_create(&rgb_thread_data, rgb_thread_stack,STACK_SIZE,
+                  (k_thread_entry_t)rgb_thread_fn, NULL, NULL, NULL,
                   PRIORITY, 0, K_NO_WAIT);
 }
